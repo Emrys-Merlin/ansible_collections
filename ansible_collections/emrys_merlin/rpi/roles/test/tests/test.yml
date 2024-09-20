@@ -1,0 +1,5 @@
+---
+- hosts: localhost
+  remote_user: root
+  roles:
+    - collections/ansible_collections/emrys_merlin/rpi/roles/test
