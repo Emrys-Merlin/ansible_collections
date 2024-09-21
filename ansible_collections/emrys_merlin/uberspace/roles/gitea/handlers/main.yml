@@ -1,0 +1,13 @@
+- name: Migrate database
+  ansible.builtin.shell:
+    cmd: "${HOME}/bin/gitea -c ${HOME}/etc/gitea/app.ini migrate"
+
+- name: Reread supervisorctl
+  community.general.supervisorctl:
+    name: gitea
+    state: present
+
+- name: Restart service
+  community.general.supervisorctl:
+    name: gitea
+    state: restarted

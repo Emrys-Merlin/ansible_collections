@@ -1,0 +1,82 @@
+- name: Create gitea database
+  community.mysql.mysql_db:
+    name: "{{ gitea_db_name }}"
+    state: present
+    login_user: "{{ ansible_user }}"
+    login_password: "{{ gitea_db_password }}"
+
+- name: Check if gitea binary exists {{ gitea_version }}
+  ansible.builtin.stat:
+    path: "${HOME}/bin/gitea-{{ gitea_version }}"
+  register: gitea_binary
+
+- name: Download gitea binary
+  ansible.builtin.get_url:
+    url: "https://github.com/go-gitea/gitea/releases/download/v{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
+    dest: "${HOME}/bin/gitea-{{ gitea_version }}"
+    mode: "755"
+  when: not gitea_binary.stat.exists
+  notify:
+    - Migrate database
+    - Restart service
+
+- name: Link gitea binary
+  ansible.builtin.file:
+    src: "${HOME}/bin/gitea-{{ gitea_version }}"
+    dest: "${HOME}/bin/gitea"
+    state: link
+  when: not gitea_binary.stat.exists
+
+- name: Create gitea config directory
+  ansible.builtin.file:
+    path: "${HOME}/etc/gitea"
+    state: directory
+    mode: "755"
+
+- name: Copy config template
+  ansible.builtin.template:
+    src: templates/app.ini.j2
+    dest: "${HOME}/etc/gitea/app.ini"
+    mode: "644"
+  notify:
+    - Restart service
+
+- name: Create gitea data directory
+  ansible.builtin.file:
+    path: "${HOME}/var/gitea"
+    state: directory
+    mode: "755"
+
+- name: Copy supervisorctl config
+  ansible.builtin.template:
+    src: templates/gitea.ini.j2
+    dest: "${HOME}/etc/services.d/gitea.ini"
+    mode: "644"
+  notify:
+    - Reread supervisorctl
+    - Restart service
+
+- name: Check if gitea is reachable
+  ansible.builtin.uri:
+    url: "{{ gitea_url }}"
+    method: HEAD
+  register: uri_test
+  failed_when: uri_test.status is undefined or uri_test.status <= 0
+
+- name: Start web backend
+  ansible.builtin.shell:
+    cmd: "uberspace web backend set {{ gitea_url_path }} --http --remove-prefix --port {{ gitea_port }}"
+  when: uri_test.status > 400
+
+- name: Check admin user
+  ansible.builtin.shell:
+    cmd: "${HOME}/bin/gitea -c ${HOME}/etc/gitea/app.ini admin user list | grep {{ gitea_admin_user }}"
+    chdir: "${HOME}/var/gitea"
+  register: admin_test
+  failed_when: admin_test.rc > 1
+
+- name: Create admin user
+  ansible.builtin.shell:
+    cmd: '${HOME}/bin/gitea -c ${HOME}/etc/gitea/app.ini admin user create --username {{ gitea_admin_user }} --password "{{ gitea_admin_password }}" --email {{ ansible_user }}@uber.space --admin'
+    chdir: "${HOME}/var/gitea"
+  when: admin_test.rc > 0

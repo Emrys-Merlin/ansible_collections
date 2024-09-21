@@ -1,0 +1,32 @@
+[server]
+DOMAIN               = {{ ansible_user }}.uber.space
+ROOT_URL             = https://%(DOMAIN)s{{ gitea_url_path }}
+OFFLINE_MODE         = true ; privacy option.
+LFS_START_SERVER     = true ; Enables Git LFS support
+HTTP_PORT            = {{ gitea_port }} 
+APP_DATA_PATH        =  /home/{{ ansible_user }}/var/gitea
+
+[database]
+DB_TYPE  = mysql
+NAME     = {{ gitea_db_name }}
+USER     = {{ ansible_user }}
+PASSWD   = {{ gitea_db_password }}
+
+[security]
+INSTALL_LOCK        = true
+MIN_PASSWORD_LENGTH = 8
+PASSWORD_COMPLEXITY = lower ; This allows well to remember but still secure passwords
+SECRET_KEY          = {{ gitea_secret_key }}
+
+[service]
+DISABLE_REGISTRATION       = true ; security option, only admins can create new users.
+SHOW_REGISTRATION_BUTTON   = false
+REGISTER_EMAIL_CONFIRM     = true
+DEFAULT_ORG_VISIBILITY     = private ; [public, limited, private]
+DEFAULT_KEEP_EMAIL_PRIVATE = true
+NO_REPLY_ADDRESS           = noreply.{{ ansible_user }}.uber.space
+
+[mailer]
+ENABLED     = true
+MAILER_TYPE = sendmail
+FROM        = {{ ansible_user }}@uber.space

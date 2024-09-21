@@ -1,0 +1,5 @@
+[program:gitea]
+directory=%(ENV_HOME)s/var/gitea
+command=%(ENV_HOME)s/bin/gitea -c %(ENV_HOME)s/etc/gitea/app.ini web
+startsecs=30
+autorestart=yes
