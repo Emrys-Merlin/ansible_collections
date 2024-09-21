@@ -1,0 +1,38 @@
+---
+# tasks file for sr_optimal_edge_bot
+- name: Install sr_optimal_edge_bot package
+  ansible.builtin.pip:
+    virtualenv: "{{ sr_virtualenv_path }}"
+    name: "{{ sr_pip_name }}"
+    virtualenv_command: python3.9 -m venv
+    state: present
+  notify:
+    - Restart sr_optimal_edge_bot service
+
+- name: Check if symlink to sr_optimal_edge_bot executable exists
+  ansible.builtin.stat:
+    path: "{{ sr_executable_path }}"
+  register: stat_sr_optimal_edge_bot
+
+- name: Symlink sr_optimal_edge_bot executable to bin
+  ansible.builtin.file:
+    src: "{{ sr_virtualenv_path }}/bin/{{ sr_executable }}"
+    path: "{{ sr_executable_path }}"
+    state: link
+  when: not stat_sr_optimal_edge_bot.stat.exists
+  notify:
+    - Restart sr_optimal_edge_bot service
+
+- name: Check if sr_optimal_edge_bot service exists
+  ansible.builtin.stat:
+    path: "{{ sr_service_file_location }}"
+  register: stat_sr_optimal_edge_bot_service
+
+- name: Install supervisor.d service file for sr_optimal_edge_bot
+  ansible.builtin.template:
+    src: templates/sr_optimal_edge_bot.ini.j2
+    dest: "{{ sr_service_file_location }}"
+    mode: "644"
+  notify:
+    - Reread supervisor.d
+    - Restart sr_optimal_edge_bot service
