@@ -1,0 +1,4 @@
+---
+# vars file for roles/pi_server
+headless_boot_behavior: "B1" # Boot to CLI no autologin
+headless_boot_splash: 0

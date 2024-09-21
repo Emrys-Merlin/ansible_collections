@@ -1,0 +1,16 @@
+---
+# tasks file for roles/pi_server
+- name: Set X server status
+  ansible.builtin.shell:
+    cmd: "raspi-config nonint do_boot_behaviour {{ headless_boot_behavior }}"
+  become: true
+
+- name: Set boot splash
+  ansible.builtin.shell:
+    cmd: "raspi-config nonint do_boot_splash {{ headless_boot_splash }}"
+  become: true
+
+- name: Expand Filesystem
+  ansible.builtin.shell:
+    cmd: "raspi-config nonint do_expand_rootfs"
+  become: true
