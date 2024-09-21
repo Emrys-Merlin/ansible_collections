@@ -18,7 +18,7 @@ Including an example of how to use your role (for instance, with variables passe
 
     - hosts: servers
       roles:
-        - role: pi_with_hdd
+        - role: emrys_merlin.rpi.headless
           hdd_disk_encryption_password: "get from vault or other safe storage"
           hdd_disk: /dev/sda
           hdd_device_nr: 1

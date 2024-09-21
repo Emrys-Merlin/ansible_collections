@@ -17,6 +17,6 @@ Including an example of how to use your role (for instance, with variables passe
 
     - hosts: servers
       roles:
-        - role: web_watchr
-          telegram_token: "token for the telegram chat bot to send messages"
-          telegram_chat_id: "chat id of the telegram channel to post in"
+        - role: emrys_merlin.rpi.web_watchr
+          web_watchr_telegram_token: "token for the telegram chat bot to send messages"
+          web_watchr_telegram_chat_id: "chat id of the telegram channel to post in"

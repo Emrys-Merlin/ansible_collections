@@ -11,6 +11,6 @@ Including an example of how to use your role (for instance, with variables passe
 
     - hosts: servers
       roles:
-        - role: pi_server
-          boot_behavior: "B1"  # Boot to CLI no autologin
-          boot_splash: 0  # Disable splash screen
+        - role: emrys_merlin.rpi.headless
+          headless_boot_behavior: "B1"  # Boot to CLI no autologin
+          headless_boot_splash: 0  # Disable splash screen

@@ -1,6 +1,6 @@
 # My Ansible Collections
 
-I use ansible to orchestrate my servers for private projects. In particular, I often use raspberry pis or [uberspace](https://uberspace.de/en/) to host my services. Here, I collect the roles that I find useful.
+I use ansible to orchestrate my servers for private projects. In particular, I often use raspberry pis or [uberspace](https://uberspace.de/en/) to host my services. Here, I collect the roles that I find useful. They are not polished. So, please proceed with caution 🙂
 
 ## Collections
 
@@ -8,8 +8,9 @@ There are two collections `emrys_merlin.rpi`, containing all raspberry pi-specif
 
 ### `emrys_merlin.rpi`
 
-- [`headless`](./ansible_collections/emrys_merlin/rpi/roles/headless/): This role can be used to boot the raspberry pi in CLI mode (no X server or wayland started).
 - [`docker`](./ansible_collections/emrys_merlin/rpi/roles/docker/): This role installs docker, adds the user to the docker group, and logs into the [github container registry](ghcr.io)
+- [`hdd`](./ansible_collections/emrys_merlin/rpi/roles/hdd/): This role creates an encrypted partition on a drive connected to the raspberry pi and mounts it.
+- [`headless`](./ansible_collections/emrys_merlin/rpi/roles/headless/): This role can be used to boot the raspberry pi in CLI mode (no X server or wayland started).
 - [`web_watchr`](./ansible_collections/emrys_merlin/rpi/roles/web_watchr/): Rhis role launches a docker container that uses [WebWatchr](https://github.com/Emrys-Merlin/web_watchr) to monitor a website for changes.
 
 ### `emrys_merlin.uberspace`

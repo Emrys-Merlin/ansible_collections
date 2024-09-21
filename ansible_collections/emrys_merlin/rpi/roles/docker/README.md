@@ -11,6 +11,6 @@ Including an example of how to use your role (for instance, with variables passe
 
     - hosts: servers
       roles:
-        - role: pi_docker
+        - role: emrys_merlin.rpi.docker
           ghcr_username: "github user name"
           ghcr_password: "api_key"
