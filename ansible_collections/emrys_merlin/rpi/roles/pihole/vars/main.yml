@@ -1,0 +1,3 @@
+---
+# vars file for roles/pi_hole
+pi_hole_project_dir: "{{ docker_dir }}/pihole"
