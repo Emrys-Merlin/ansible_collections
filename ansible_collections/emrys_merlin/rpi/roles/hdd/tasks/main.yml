@@ -1,0 +1,52 @@
+---
+# tasks file for roles/pi_with_hdd
+- name: Partition disk
+  community.general.parted:
+    device: "{{ hdd_disk }}"
+    number: 1
+    state: present
+  become: true
+
+- name: Install cryptsetup
+  ansible.builtin.apt:
+    name: cryptsetup
+    state: present
+    cache_valid_time: 86400  # 1 day
+  become: true
+
+- name: Create and open LUKS container with a passphrase
+  community.crypto.luks_device:
+    device: "{{ hdd_device }}"
+    state: opened
+    passphrase: "{{ hdd_disk_encryption_password }}"
+    name: "{{ hdd_container }}"
+  become: true
+
+- name: Create filesystem in vault
+  community.general.filesystem:
+    device: "{{ hdd_unlocked_device }}"
+    fstype: ext4
+    state: present
+  become: true
+
+- name: Mount filesystem
+  ansible.posix.mount:
+    src: "{{ hdd_unlocked_device }}"
+    path: "{{ hdd_mount_point }}"
+    fstype: "ext4"
+    state: "mounted"
+    opts: rw,noauto
+  become: true
+
+- name: Change value group to user
+  ansible.builtin.file:
+    path: "{{ hdd_mount_point }}"
+    group: "{{ hdd_ansible_user }}"
+    mode: "775"
+  become: true
+
+- name: Softlink to home
+  ansible.builtin.file:
+    path: "~/{{ hdd_container }}"
+    src: "{{ hdd_mount_point }}"
+    state: link

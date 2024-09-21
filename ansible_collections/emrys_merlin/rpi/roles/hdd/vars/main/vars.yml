@@ -1,0 +1,8 @@
+---
+# vars file for roles/pi_with_hdd
+hdd_disk: /dev/sda
+hdd_device_nr: 1
+hdd_device: "{{ disk }}{{ device_nr }}"
+hdd_container: vault
+hdd_unlocked_device: "/dev/mapper/{{ container }}"
+hdd_mount_point: "/media/{{ container }}"
