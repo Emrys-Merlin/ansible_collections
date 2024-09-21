@@ -1,0 +1,10 @@
+---
+# vars file for roles/docker
+docker_key_file_location: /etc/apt/keyrings/docker.asc
+docker_list_location: /etc/apt/sources.list.d/docker.list
+docker_architecture_map:
+  aarch64: arm64
+  x86_64: amd64
+  amd64: amd64
+  i386: i386
+  i686: i386

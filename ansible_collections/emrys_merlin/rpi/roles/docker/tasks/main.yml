@@ -1,0 +1,52 @@
+---
+# tasks file for roles/pi_docker
+- name: Install docker prerequisites
+  ansible.builtin.apt:
+    pkg:
+      - ca-certificates
+      - curl
+    state: present
+    cache_valid_time: 86400
+  become: true
+
+- name: Check if repository key exists
+  ansible.builtin.stat:
+    path: "{{ docker_key_file_location }}"
+  register: docker_key
+
+- name: Download docker repository key
+  ansible.builtin.uri:
+    url: https://download.docker.com/linux/raspbian/gpg
+    dest: "{{ docker_key_file_location }}"
+    mode: "a+r"
+  become: true
+  when: not docker_key.stat.exists
+
+- name: Copy docker.list
+  ansible.builtin.template:
+    src: templates/docker.list.j2
+    dest: "{{ docker_list_location }}"
+    mode: "644"
+  become: true
+
+- name: Install docker
+  ansible.builtin.apt:
+    pkg:
+      - docker.io
+      - docker-compose
+    state: present
+    update_cache: true
+  become: true
+
+- name: Add user to docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  become: true
+
+- name: Login to ghcr.io
+  community.docker.docker_login:
+    registry: ghcr.io
+    username: "{{ ghcr_username }}"
+    password: "{{ ghcr_password }}"
