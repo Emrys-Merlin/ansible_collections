@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Only do it like this if you trust the 
+# runner enough to have clear text secrets there.
+TELEGRAM_TOKEN="{{ telegram_token }}"
+TELEGRAM_CHAT_ID="{{ telegram_chat_id }}"
+
+docker run \
+    --platform linux/arm64 \
+    -e TELEGRAM_TOKEN=$TELEGRAM_TOKEN \
+    -e TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID \
+    ghcr.io/emrys-merlin/web_watchr_flymagic:main

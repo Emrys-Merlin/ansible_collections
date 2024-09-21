@@ -1,0 +1,22 @@
+---
+# tasks file for roles/web_watchr
+- name: Create bin directory
+  ansible.builtin.file:
+    path: "{{ web_watchr_script_path | dirname }}"
+    state: directory
+    mode: "755"
+
+- name: Copy runner script
+  ansible.builtin.template:
+    src: templates/web_watchr.sh.j2
+    dest: "{{ web_watchr_script_path }}"
+    mode: "755"
+
+- name: Setup cronjob
+  ansible.builtin.cron:
+    name: "web_watchr"
+    hour: "22"
+    minute: "13"
+    job: "{{ web_watchr_script_path }}"
+    user: "{{ ansible_user }}"
+    state: present

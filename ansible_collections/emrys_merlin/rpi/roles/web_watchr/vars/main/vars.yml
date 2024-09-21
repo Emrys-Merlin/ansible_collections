@@ -1,0 +1,3 @@
+---
+# vars file for roles/web_watchr
+web_watchr_script_path: ${HOME}/bin/web_watchr_runner.sh
