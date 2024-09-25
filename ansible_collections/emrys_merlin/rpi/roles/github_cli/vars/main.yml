@@ -1,0 +1,11 @@
+---
+# vars file for collections/ansible_collections/emrys_merlin/rpi/roles/github_cli
+github_cli_key_file_location: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+github_cli_list_location: /etc/apt/sources.list.d/github-cli.list
+github_cli_protocol: ssh  # https or ssh
+github_cli_architecture_map:
+  aarch64: arm64
+  x86_64: amd64
+  amd64: amd64
+  i386: i386
+  i686: i386

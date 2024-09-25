@@ -1,0 +1,37 @@
+---
+# tasks file for collections/ansible_collections/emrys_merlin/rpi/roles/github_cli
+- name: Check if repository key exists
+  ansible.builtin.stat:
+    path: "{{ github_cli_key_file_location }}"
+  register: github_cli_key
+
+- name: Download github_cli repository key
+  ansible.builtin.uri:
+    url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    dest: "{{ github_cli_key_file_location }}"
+    mode: "a+r"
+  become: true
+  when: not github_cli_key.stat.exists
+
+- name: Copy github_cli.list
+  ansible.builtin.template:
+    src: templates/github_cli.list.j2
+    dest: "{{ github_cli_list_location }}"
+    mode: "644"
+  become: true
+
+- name: Install github_cli
+  ansible.builtin.apt:
+    pkg:
+      - gh
+    state: present
+    update_cache: true
+  become: true
+
+- name: Login to github
+  ansible.builtin.shell:
+    cmd: |
+      gh auth login --with-token -p {{ github_cli_protocol }} << EOF
+      {{ github_cli_access_token }}
+      EOF
+    creates: /home/{{ ansible_user }}/.config/gh/hosts.yml
