@@ -12,6 +12,7 @@ There are two collections `emrys_merlin.rpi`, containing all raspberry pi-specif
 - [`github_cli`](./ansible_collections/emrys_merlin/rpi/roles/github_cli/): This role installs `gh` and logs in a user via an access token. If the `ssh` protocol is specified and the token has the necessary permissions, an ssh key is uploaded to GitHub.
 - [`hdd`](./ansible_collections/emrys_merlin/rpi/roles/hdd/): This role creates an encrypted partition on a drive connected to the raspberry pi and mounts it.
 - [`headless`](./ansible_collections/emrys_merlin/rpi/roles/headless/): This role can be used to boot the raspberry pi in CLI mode (no X server or wayland started).
+- [`rclone`](./ansible_collections/emrys_merlin/rpi/roles/rclone/): Launch an rclone docker container to mount a webdrive. I use it to mount a [pcloud](https://pcloud.com) folder on my raspberry pi.
 - [`web_watchr`](./ansible_collections/emrys_merlin/rpi/roles/web_watchr/): Rhis role launches a docker container that uses [WebWatchr](https://github.com/Emrys-Merlin/web_watchr) to monitor a website for changes.
 
 ### `emrys_merlin.uberspace`

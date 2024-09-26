@@ -1,0 +1,51 @@
+---
+# tasks file for collections/ansible_collections/emrys_merlin/rpi/roles/rclone
+- name: Create rclone data directory
+  ansible.builtin.file:
+    path: "{{ rclone_location }}"
+    state: directory
+    mode: '755'
+
+- name: Stop rclone container
+  community.docker.docker_compose:
+    project_src: "{{ rclone_location }}"
+    state: absent
+
+- name: Create rclone data directory
+  ansible.builtin.file:
+    path: "{{ rclone_location }}/data/pcloud"
+    state: directory
+    mode: '755'
+    recurse: true
+
+- name: Create rclone config directory
+  ansible.builtin.file:
+    path: "{{ rclone_location }}/rclone"
+    state: directory
+    mode: '755'
+
+- name: Copy compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ rclone_location }}/compose.yaml"
+    mode: '644'
+
+- name: Copy rclone config
+  ansible.builtin.copy:
+    src: "{{ rclone_config }}"
+    dest: "{{ rclone_location }}/rclone/rclone.conf"
+    mode: '644'
+
+- name: Run rclone container
+  community.docker.docker_compose:
+    project_src: "{{ rclone_location }}"
+    state: present
+    build: false
+    pull: true
+    remove_orphans: true
+    recreate: always
+  register: rclone_container
+
+- name: Show output of rclone container
+  ansible.builtin.debug:
+    var: rclone_container

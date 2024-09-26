@@ -1,0 +1,6 @@
+---
+# vars file for collections/ansible_collections/emrys_merlin/rpi/roles/pcloud_cc
+rclone_location: "{{ docker_dir }}/rclone"
+rclone_uid: 1000
+rclone_gid: "{{ rclone_uid }}"
+rclone_config: rclone.conf

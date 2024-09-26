@@ -1,0 +1,17 @@
+services:
+  rclone:
+    image: rclone/rclone
+    command: "mount pcloud:Backups /data/pcloud"
+    volumes:
+      - {{ rclone_location }}/rclone:/config/rclone
+      - {{ rclone_location }}/data:/data:shared
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+    user: {{ rclone_uid }}:{{ rclone_gid }}
+    devices:
+      - /dev/fuse
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    
