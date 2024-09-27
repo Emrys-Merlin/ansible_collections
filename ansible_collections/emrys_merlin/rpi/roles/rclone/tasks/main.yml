@@ -6,14 +6,20 @@
     state: directory
     mode: '755'
 
+- name: Check compose file
+  ansible.builtin.stat:
+    path: "{{ rclone_location }}/compose.yaml"
+  register: compose_file
+
 - name: Stop rclone container
   community.docker.docker_compose:
     project_src: "{{ rclone_location }}"
     state: absent
+  when: compose_file.stat.exists
 
 - name: Create rclone data directory
   ansible.builtin.file:
-    path: "{{ rclone_location }}/data/pcloud"
+    path: "{{ rclone_location }}/data"
     state: directory
     mode: '755'
     recurse: true
@@ -46,6 +52,12 @@
     recreate: always
   register: rclone_container
 
-- name: Show output of rclone container
-  ansible.builtin.debug:
-    var: rclone_container
+- name: Add to crontab
+  ansible.builtin.cron:
+    name: "{{ rclone_location }}"
+    job: "cd {{ rclone_location }} && docker-compose up"
+    minute: "{{ rclone_cron_minute }}"
+    hour: "{{ rclone_cron_hour }}"
+    user: "{{ ansible_user_id }}"
+    state: present
+  when: rclone_cron_enable

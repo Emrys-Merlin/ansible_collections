@@ -1,7 +1,7 @@
 services:
   rclone:
     image: rclone/rclone
-    command: "mount {{ rclone_remote }}:{{ rclone_remote_dir }} /data/pcloud"
+    command: {{ rclone_command }}
     volumes:
       - {{ rclone_location }}/rclone:/config/rclone
       - {{ rclone_location }}/data:/data:shared

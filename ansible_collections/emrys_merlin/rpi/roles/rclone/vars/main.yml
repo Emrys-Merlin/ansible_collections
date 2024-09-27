@@ -4,3 +4,6 @@ rclone_location: "{{ docker_dir }}/rclone"
 rclone_uid: 1000
 rclone_gid: "{{ rclone_uid }}"
 rclone_config: rclone.conf
+rclone_cron_enable: false
+rclone_cron_hour: 0
+rclone_cron_minute: 0
