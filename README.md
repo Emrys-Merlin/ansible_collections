@@ -13,6 +13,7 @@ There are two collections `emrys_merlin.rpi`, containing all raspberry pi-specif
 - [`hdd`](./ansible_collections/emrys_merlin/rpi/roles/hdd/): This role creates an encrypted partition on a drive connected to the raspberry pi and mounts it.
 - [`headless`](./ansible_collections/emrys_merlin/rpi/roles/headless/): This role can be used to boot the raspberry pi in CLI mode (no X server or wayland started).
 - [`rclone`](./ansible_collections/emrys_merlin/rpi/roles/rclone/): Launch an rclone docker container to mount a webdrive. I use it to mount a [pcloud](https://pcloud.com) folder on my raspberry pi.
+- [`watchdog`](./ansible_collections/emrys_merlin/rpi/roles/watchdog/): A very barebone role to launch a watchdog that checks if an IP address is reachable.
 - [`web_watchr`](./ansible_collections/emrys_merlin/rpi/roles/web_watchr/): Rhis role launches a docker container that uses [WebWatchr](https://github.com/Emrys-Merlin/web_watchr) to monitor a website for changes.
 
 ### `emrys_merlin.uberspace`

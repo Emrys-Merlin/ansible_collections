@@ -1,0 +1,8 @@
+---
+# handlers file for collections/ansible_collections/emrys_merlin/rpi/roles/watchdog
+- name: Restart watchdog
+  ansible.builtin.systemd:
+    name: watchdog
+    state: restarted
+    enabled: true
+  become: true

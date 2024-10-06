@@ -1,0 +1,17 @@
+---
+# tasks file for collections/ansible_collections/emrys_merlin/rpi/roles/watchdog
+- name: Install watchdog
+  ansible.builtin.apt:
+    name: watchdog
+    state: present
+    cache_valid_time: 86400
+  become: true
+
+- name: Copy config file
+  ansible.builtin.template:
+    src: templates/watchdog.conf.j2
+    dest: /etc/watchdog.conf
+    mode: "644"
+  become: true
+  notify:
+    - Restart watchdog
