@@ -9,4 +9,5 @@ docker run \
     --platform linux/arm64 \
     -e TELEGRAM_TOKEN=$TELEGRAM_TOKEN \
     -e TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID \
+    -v web_watchr_cache:/cache \
     ghcr.io/emrys-merlin/web_watchr_flymagic:main
