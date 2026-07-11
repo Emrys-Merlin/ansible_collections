@@ -16,7 +16,7 @@
 
 - name: Download docker repository key
   ansible.builtin.uri:
-    url: https://download.docker.com/linux/raspbian/gpg
+    url: https://download.docker.com/linux/debian/gpg
     dest: "{{ docker_key_file_location }}"
     mode: "a+r"
   become: true
@@ -33,7 +33,10 @@
   ansible.builtin.apt:
     pkg:
       - docker.io
+      # docker-compose (v1) is retained until the compose roles migrate to the
+      # docker_compose_v2 module; docker-compose-plugin provides `docker compose` (v2).
       - docker-compose
+      - docker-compose-plugin
     state: present
     update_cache: true
   become: true
