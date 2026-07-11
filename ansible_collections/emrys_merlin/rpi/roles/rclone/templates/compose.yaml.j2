@@ -2,6 +2,7 @@ services:
   rclone:
     image: rclone/rclone
     command: {{ rclone_command }}
+    restart: "{{ rclone_restart }}"
     volumes:
       - {{ rclone_location }}/rclone:/config/rclone
       - {{ rclone_location }}/data:/data:shared
