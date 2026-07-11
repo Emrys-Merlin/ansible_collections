@@ -1,0 +1,42 @@
+---
+# tasks file for emrys_merlin.rpi.victoria_metrics
+- name: Create Victoria Metrics directory
+  ansible.builtin.file:
+    path: "{{ victoria_metrics_location }}"
+    state: directory
+    mode: "0755"
+
+- name: Create Victoria Metrics data directory
+  ansible.builtin.file:
+    path: "{{ victoria_metrics_location }}/data"
+    state: directory
+    mode: "0755"
+
+- name: Template Home Assistant scrape config
+  ansible.builtin.template:
+    src: scrape.yml.j2
+    dest: "{{ victoria_metrics_location }}/scrape.yml"
+    mode: "0600"
+  when: victoria_metrics_scrape_homeassistant
+
+# The container's DNS can't resolve mDNS (.local) names, so resolve the HA host on
+# the host (where avahi/nss-mdns works) and pin it into the container via
+# extra_hosts. Re-resolves on every run, so it self-heals if the IP changes.
+- name: Resolve Home Assistant IPv4 address on the host
+  ansible.builtin.command: "getent ahostsv4 {{ victoria_metrics_ha_host }}"
+  register: victoria_metrics_ha_getent
+  changed_when: false
+  when: victoria_metrics_scrape_homeassistant
+
+- name: Template compose file
+  ansible.builtin.template:
+    src: compose.yaml.j2
+    dest: "{{ victoria_metrics_location }}/compose.yaml"
+    mode: "0644"
+
+- name: Run Victoria Metrics container
+  community.docker.docker_compose:
+    project_src: "{{ victoria_metrics_location }}"
+    state: present
+    pull: true
+    remove_orphans: true

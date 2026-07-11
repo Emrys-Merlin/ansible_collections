@@ -1,0 +1,23 @@
+services:
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:{{ victoria_metrics_version }}
+    command:
+      - "--storageDataPath=/victoria-metrics-data"
+      - "--retentionPeriod={{ victoria_metrics_retention }}"
+      - "--httpListenAddr=:{{ victoria_metrics_port }}"
+{% if victoria_metrics_scrape_homeassistant %}
+      - "--promscrape.config=/etc/victoria-metrics/scrape.yml"
+      - "--promscrape.configCheckInterval=30s"
+{% endif %}
+{% if victoria_metrics_scrape_homeassistant %}
+    extra_hosts:
+      - "{{ victoria_metrics_ha_host }}:{{ victoria_metrics_ha_getent.stdout.split()[0] }}"
+{% endif %}
+    ports:
+      - "{{ victoria_metrics_port }}:{{ victoria_metrics_port }}"
+    volumes:
+      - "{{ victoria_metrics_location }}/data:/victoria-metrics-data"
+{% if victoria_metrics_scrape_homeassistant %}
+      - "{{ victoria_metrics_location }}/scrape.yml:/etc/victoria-metrics/scrape.yml:ro"
+{% endif %}
+    restart: unless-stopped

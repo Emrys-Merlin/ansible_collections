@@ -1,0 +1,26 @@
+---
+# defaults file for emrys_merlin.rpi.victoria_metrics
+
+# Single-node Victoria Metrics deployment.
+victoria_metrics_version: v1.147.0
+victoria_metrics_location: "{{ docker_dir }}/victoria_metrics"
+victoria_metrics_port: 8428
+# Retention period, see https://docs.victoriametrics.com/#retention
+# (a bare number is months; units h/d/w/y also work). "100y" keeps data
+# effectively forever — VictoriaMetrics has no literal "infinite" setting.
+victoria_metrics_retention: "100y"
+
+# Home Assistant scrape (pull). Turn on once HA's `prometheus:` integration is
+# enabled and a long-lived access token is available via victoria_metrics_ha_token.
+victoria_metrics_scrape_homeassistant: false
+victoria_metrics_scrape_interval: 60s
+victoria_metrics_ha_scheme: http
+victoria_metrics_ha_host: homeassistant.local
+victoria_metrics_ha_port: 8123
+# HA long-lived access token; set from a 1Password lookup in host/group vars.
+victoria_metrics_ha_token: ""
+# Only these metric names are stored; everything else HA exposes is dropped.
+# Extend as more sensors come online (e.g. carbon dioxide, soil moisture).
+victoria_metrics_ha_keep_metrics:
+  - homeassistant_sensor_temperature_celsius
+  - homeassistant_sensor_humidity_percent
