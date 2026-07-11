@@ -1,0 +1,11 @@
+---
+# handlers file for collections/ansible_collections/emrys_merlin/uberspace/roles/prometheus
+- name: Reread supervisorctl
+  community.general.supervisorctl:
+    name: prometheus
+    state: present
+
+- name: Restart service
+  community.general.supervisorctl:
+    name: prometheus
+    state: restarted
