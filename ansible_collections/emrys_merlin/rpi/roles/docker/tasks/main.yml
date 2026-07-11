@@ -33,12 +33,17 @@
   ansible.builtin.apt:
     pkg:
       - docker.io
-      # docker-compose (v1) is retained until the compose roles migrate to the
-      # docker_compose_v2 module; docker-compose-plugin provides `docker compose` (v2).
-      - docker-compose
+      # docker-compose-plugin provides `docker compose` (v2), used by the
+      # docker_compose_v2 module and the rclone cron job.
       - docker-compose-plugin
     state: present
     update_cache: true
+  become: true
+
+- name: Remove obsolete docker-compose v1
+  ansible.builtin.apt:
+    pkg: docker-compose
+    state: absent
   become: true
 
 - name: Add user to docker group
