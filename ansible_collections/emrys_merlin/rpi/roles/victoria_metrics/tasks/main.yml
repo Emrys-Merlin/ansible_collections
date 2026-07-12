@@ -12,10 +12,48 @@
     state: directory
     mode: "0755"
 
+# scrape.yml lives in its own dir that is bind-mounted as a *directory*. A
+# single-file bind mount pins the container to the file's inode, so Ansible's
+# atomic-rename writes (new inode) are invisible inside the container and VM never
+# live-reloads. Mounting the directory makes renamed files visible.
+- name: Create Victoria Metrics config directory
+  ansible.builtin.file:
+    path: "{{ victoria_metrics_location }}/config"
+    state: directory
+    mode: "0755"
+
+- name: Remove legacy single-file scrape config
+  ansible.builtin.file:
+    path: "{{ victoria_metrics_location }}/scrape.yml"
+    state: absent
+
+# Ask HA for the entity -> area/integration map so the scrape config can relabel
+# `location`/`integration` onto each kept series. Read-only, so force it to run in
+# --check too (otherwise the scrape template would render with no rules).
+- name: Fetch entity to area/integration map from Home Assistant
+  ansible.builtin.uri:
+    url: "{{ victoria_metrics_ha_scheme }}://{{ victoria_metrics_ha_host }}:{{ victoria_metrics_ha_port }}/api/template"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ victoria_metrics_ha_token }}"
+    body_format: json
+    body:
+      template: "{{ victoria_metrics_ha_label_template }}"
+    return_content: true
+  register: victoria_metrics_ha_label_raw
+  changed_when: false
+  check_mode: false
+  when: victoria_metrics_scrape_homeassistant and victoria_metrics_ha_enrich_labels
+
+- name: Build entity label map
+  ansible.builtin.set_fact:
+    victoria_metrics_ha_entity_labels: "{{ victoria_metrics_ha_label_raw.content | from_json }}"
+  when: victoria_metrics_scrape_homeassistant and victoria_metrics_ha_enrich_labels
+
 - name: Template Home Assistant scrape config
   ansible.builtin.template:
     src: scrape.yml.j2
-    dest: "{{ victoria_metrics_location }}/scrape.yml"
+    dest: "{{ victoria_metrics_location }}/config/scrape.yml"
     mode: "0600"
   when: victoria_metrics_scrape_homeassistant
 
@@ -26,6 +64,7 @@
   ansible.builtin.command: "getent ahostsv4 {{ victoria_metrics_ha_host }}"
   register: victoria_metrics_ha_getent
   changed_when: false
+  check_mode: false
   when: victoria_metrics_scrape_homeassistant
 
 - name: Template compose file

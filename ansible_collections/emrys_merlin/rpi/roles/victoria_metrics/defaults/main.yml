@@ -24,3 +24,25 @@ victoria_metrics_ha_token: ""
 victoria_metrics_ha_keep_metrics:
   - homeassistant_sensor_temperature_celsius
   - homeassistant_sensor_humidity_percent
+
+# Enrich the kept HA sensor series with a `location` label (HA area) and an
+# `integration` label (the entity's config-entry domain), generated from HA at
+# deploy time via /api/template. Sensors with no HA area get location=unassigned.
+# Requires an HA version with config_entry_id()/config_entry_attr() (verified on
+# the emu HA). Set false to fall back to the plain keep-only scrape.
+victoria_metrics_ha_enrich_labels: true
+# HA-side Jinja rendered server-side by /api/template. Emits a JSON array of
+# [entity, area, integration] triples (area/integration are null when HA has none).
+# JSON avoids any delimiter/newline/quoting fragility on the Ansible side — it is
+# parsed back with from_json. MUST stay wrapped in {% raw %} so Ansible does not
+# evaluate the HA constructs (states.sensor, area_name, config_entry_attr) itself.
+victoria_metrics_ha_label_template: >-
+  {% raw %}
+  {%- set ns = namespace(rows=[]) -%}
+  {%- for s in states.sensor -%}
+  {%- if state_attr(s.entity_id, 'device_class') in ['temperature', 'humidity'] -%}
+  {%- set ns.rows = ns.rows + [[s.entity_id, area_name(s.entity_id), config_entry_attr(config_entry_id(s.entity_id), 'domain')]] -%}
+  {%- endif -%}
+  {%- endfor -%}
+  {{ ns.rows | tojson }}
+  {% endraw %}

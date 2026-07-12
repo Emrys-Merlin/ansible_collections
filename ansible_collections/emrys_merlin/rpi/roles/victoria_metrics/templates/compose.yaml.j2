@@ -18,6 +18,6 @@ services:
     volumes:
       - "{{ victoria_metrics_location }}/data:/victoria-metrics-data"
 {% if victoria_metrics_scrape_homeassistant %}
-      - "{{ victoria_metrics_location }}/scrape.yml:/etc/victoria-metrics/scrape.yml:ro"
+      - "{{ victoria_metrics_location }}/config:/etc/victoria-metrics:ro"
 {% endif %}
     restart: unless-stopped

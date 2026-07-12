@@ -13,3 +13,19 @@ scrape_configs:
       - source_labels: [__name__]
         regex: "{{ victoria_metrics_ha_keep_metrics | join('|') }}"
         action: keep
+{% if victoria_metrics_ha_enrich_labels | default(false) %}
+{# to_json emits valid YAML-safe quoting/escaping — the regex contains backslashes
+   (\.) and areas contain spaces/&, both of which break naive double-quoting. #}
+{% for row in victoria_metrics_ha_entity_labels | default([]) if row | length == 3 %}
+      - source_labels: [entity]
+        regex: {{ row[0] | regex_escape | to_json }}
+        target_label: location
+        replacement: {{ row[1] | default('unassigned', true) | to_json }}
+{% if row[2] | default('', true) %}
+      - source_labels: [entity]
+        regex: {{ row[0] | regex_escape | to_json }}
+        target_label: integration
+        replacement: {{ row[2] | to_json }}
+{% endif %}
+{% endfor %}
+{% endif %}
