@@ -24,6 +24,8 @@ victoria_metrics_ha_token: ""
 victoria_metrics_ha_keep_metrics:
   - homeassistant_sensor_temperature_celsius
   - homeassistant_sensor_humidity_percent
+  - homeassistant_sensor_power_w
+  - homeassistant_sensor_energy_kwh
 
 # Enrich the kept HA sensor series with a `location` label (HA area) and an
 # `integration` label (the entity's config-entry domain), generated from HA at
@@ -40,7 +42,7 @@ victoria_metrics_ha_label_template: >-
   {% raw %}
   {%- set ns = namespace(rows=[]) -%}
   {%- for s in states.sensor -%}
-  {%- if state_attr(s.entity_id, 'device_class') in ['temperature', 'humidity'] -%}
+  {%- if state_attr(s.entity_id, 'device_class') in ['temperature', 'humidity', 'power', 'energy'] -%}
   {%- set ns.rows = ns.rows + [[s.entity_id, area_name(s.entity_id), config_entry_attr(config_entry_id(s.entity_id), 'domain')]] -%}
   {%- endif -%}
   {%- endfor -%}
