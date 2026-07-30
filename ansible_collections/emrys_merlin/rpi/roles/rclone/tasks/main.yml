@@ -36,11 +36,28 @@
     dest: "{{ rclone_location }}/compose.yaml"
     mode: '644'
 
+# Preferred path: the config arrives as a variable (e.g. a 1Password lookup), so
+# no plaintext copy has to exist on the control node. `content` writes the bytes
+# verbatim -- no template, so rclone's file format stays rclone's business.
+- name: Write rclone config from variable
+  ansible.builtin.copy:
+    content: "{{ rclone_config_content }}"
+    dest: "{{ rclone_location }}/rclone/rclone.conf"
+    owner: "{{ rclone_uid }}"
+    group: "{{ rclone_gid }}"
+    mode: '600'
+  no_log: true  # without this, --diff prints the OAuth tokens
+  when: rclone_config_content is defined
+
+# Legacy path: a plaintext rclone.conf in the role's files/ directory.
 - name: Copy rclone config
   ansible.builtin.copy:
     src: "{{ rclone_config }}"
     dest: "{{ rclone_location }}/rclone/rclone.conf"
-    mode: '644'
+    owner: "{{ rclone_uid }}"
+    group: "{{ rclone_gid }}"
+    mode: '600'
+  when: rclone_config_content is not defined
 
 - name: Run rclone container
   community.docker.docker_compose_v2:
