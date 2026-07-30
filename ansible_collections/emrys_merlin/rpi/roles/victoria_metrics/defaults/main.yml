@@ -20,12 +20,19 @@ victoria_metrics_ha_port: 8123
 # HA long-lived access token; set from a 1Password lookup in host/group vars.
 victoria_metrics_ha_token: ""
 # Only these metric names are stored; everything else HA exposes is dropped.
-# Extend as more sensors come online (e.g. carbon dioxide, soil moisture).
+# Extend as more sensors come online (e.g. carbon dioxide).
+# NB `humidity_percent` is *air* humidity; soil moisture is a separate device
+# class and lands in `moisture_percent`. `number_state_percent` is kept for the
+# soil sensors' on-device `soil_moisture_offset` — without it a step in the
+# moisture series is indistinguishable from someone changing the calibration.
 victoria_metrics_ha_keep_metrics:
   - homeassistant_sensor_temperature_celsius
   - homeassistant_sensor_humidity_percent
+  - homeassistant_sensor_moisture_percent
+  - homeassistant_sensor_battery_percent
   - homeassistant_sensor_power_w
   - homeassistant_sensor_energy_kwh
+  - homeassistant_number_state_percent
 
 # Enrich the kept HA sensor series with a `location` label (HA area) and an
 # `integration` label (the entity's config-entry domain), generated from HA at
@@ -38,11 +45,13 @@ victoria_metrics_ha_enrich_labels: true
 # JSON avoids any delimiter/newline/quoting fragility on the Ansible side — it is
 # parsed back with from_json. MUST stay wrapped in {% raw %} so Ansible does not
 # evaluate the HA constructs (states.sensor, area_name, config_entry_attr) itself.
+# Only covers states.sensor, so the kept `number` entities (soil_moisture_offset)
+# stay unlabelled — select those by `entity` regex, not by location.
 victoria_metrics_ha_label_template: >-
   {% raw %}
   {%- set ns = namespace(rows=[]) -%}
   {%- for s in states.sensor -%}
-  {%- if state_attr(s.entity_id, 'device_class') in ['temperature', 'humidity', 'power', 'energy'] -%}
+  {%- if state_attr(s.entity_id, 'device_class') in ['temperature', 'humidity', 'moisture', 'battery', 'power', 'energy'] -%}
   {%- set ns.rows = ns.rows + [[s.entity_id, area_name(s.entity_id), config_entry_attr(config_entry_id(s.entity_id), 'domain')]] -%}
   {%- endif -%}
   {%- endfor -%}
