@@ -16,6 +16,8 @@ Requires Docker on the host (see the `docker` role).
 - `victoria_metrics_ha_scheme` / `_host` / `_port` — HA target (default `http://homeassistant.local:8123`).
 - `victoria_metrics_ha_token` — HA long-lived access token (set from a secret store).
 - `victoria_metrics_ha_keep_metrics` — list of metric names to keep; everything else is dropped.
+- `victoria_metrics_ha_keep_last_updated_entities` — `entity` regexes for which
+  `homeassistant_last_updated_time_seconds` is also kept (empty disables it).
 
 ## Home Assistant scrape
 
@@ -46,9 +48,32 @@ curl -sH "Authorization: Bearer $HA_TOKEN" http://homeassistant.local:8123/api/p
   | grep -v '^#' | grep -i <entity-substring>
 ```
 
-`homeassistant_entity_available` would make a good liveness signal but is ~1300
-series on this instance, so it is deliberately not kept; derive staleness from
-`time() - timestamp(last_over_time(...))` instead.
+### Staleness: never derive it from sample age
+
+`time() - timestamp(last_over_time(m[7d]))` measures **scrape** freshness and is
+useless as a liveness signal. HA re-exports an entity's retained state on every
+scrape, so a device that stopped reporting days ago still produces a fresh sample
+every scrape interval, forever. Soil-moisture probes were silent for 4.5 days while
+that expression reported ~30s for all of them.
+
+Use **`homeassistant_last_updated_time_seconds`** instead — HA's own `last_updated`
+timestamp per entity, and the only device-side signal on `/api/prometheus`. Enable
+it per entity via `victoria_metrics_ha_keep_last_updated_entities`; it covers ~1300
+entities instance-wide, hence the filter. Age is then `time() - <that metric>`.
+
+Two caveats:
+
+- It moves on a **value or attribute change**, not on every report, so a genuinely
+  constant sensor also ages. Compare two channels on the same device (e.g. moisture
+  vs temperature) to tell "unchanged" from "silent".
+- `homeassistant_entity_available` does **not** cover this failure: an entity with a
+  stale retained state is still `available`. It only catches the `unavailable`/
+  `unknown` states.
+
+Because the entity regexes contain `\.`, the combined keep rule is emitted with
+`| to_json`. Hand-quoting it produces a YAML unknown-escape error, on which
+VictoriaMetrics logs a parse failure and **silently continues with the previous
+config** — the scrape keeps working and nothing looks wrong.
 
 ### Label enrichment covers `sensor` only
 

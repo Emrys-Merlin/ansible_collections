@@ -34,6 +34,29 @@ victoria_metrics_ha_keep_metrics:
   - homeassistant_sensor_energy_kwh
   - homeassistant_number_state_percent
 
+# Device-side freshness, kept only for the entities matched here.
+#
+# Why this exists: the scrape can never look stale. HA re-exports an entity's
+# retained state on every scrape, so VictoriaMetrics stores a fresh sample every
+# 60s even for a channel whose device stopped reporting days ago — which is
+# exactly what happened to the soil-moisture sensors (plans/14, finding 0).
+# `homeassistant_last_updated_time_seconds` carries HA's own last_updated unix
+# timestamp and is the only device-side liveness signal on /api/prometheus.
+#
+# It covers ~1300 entities on this instance, hence the entity filter. Values are
+# **regexes** matched against the `entity` label (not literals — they are not
+# escaped). Empty list disables it and restores the plain keep-only scrape.
+#
+# Caveat worth knowing before trusting the number: last_updated moves when the
+# state *or its attributes* change, not on every report. So the derived age is
+# "time since this value last moved", which cannot distinguish a healthy sensor
+# reporting an unchanged value from one that stopped reporting. Comparing two
+# channels on the same device (moisture vs temperature) is what disambiguates —
+# see the staleness table in the plant-moisture dashboard.
+victoria_metrics_ha_keep_last_updated_entities:
+  - "sensor\\.pflanze.*"
+  - "number\\.pflanze.*"
+
 # Enrich the kept HA sensor series with a `location` label (HA area) and an
 # `integration` label (the entity's config-entry domain), generated from HA at
 # deploy time via /api/template. Sensors with no HA area get location=unassigned.

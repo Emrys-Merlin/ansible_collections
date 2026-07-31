@@ -10,9 +10,26 @@ scrape_configs:
       - targets:
           - "{{ victoria_metrics_ha_host }}:{{ victoria_metrics_ha_port }}"
     metric_relabel_configs:
+{% set _lu = victoria_metrics_ha_keep_last_updated_entities | default([]) %}
+{% if _lu %}
+{# One combined keep rather than keep+drop: relabel regexes are RE2, which has no
+   negative lookahead, so "drop last_updated unless entity matches" is not
+   expressible. Both sides are anchored by Prometheus as ^(?:...)$. The `.*` on the
+   first branch also matches series that carry no `entity` label at all, which
+   join to "<name>;".
+   to_json, not manual quotes: the entity regexes contain \. and YAML rejects that
+   as an unknown escape inside a double-quoted scalar (VM then refuses the whole
+   file and silently keeps the previous config). Same reason as the rules below. #}
+{% set _keep_re = '(' ~ (victoria_metrics_ha_keep_metrics | join('|')) ~ ');.*|homeassistant_last_updated_time_seconds;(' ~ (_lu | join('|')) ~ ')' %}
+      - source_labels: [__name__, entity]
+        separator: ";"
+        regex: {{ _keep_re | to_json }}
+        action: keep
+{% else %}
       - source_labels: [__name__]
         regex: "{{ victoria_metrics_ha_keep_metrics | join('|') }}"
         action: keep
+{% endif %}
 {% if victoria_metrics_ha_enrich_labels | default(false) %}
 {# to_json emits valid YAML-safe quoting/escaping — the regex contains backslashes
    (\.) and areas contain spaces/&, both of which break naive double-quoting. #}
