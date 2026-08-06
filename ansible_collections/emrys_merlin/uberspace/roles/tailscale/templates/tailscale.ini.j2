@@ -1,0 +1,14 @@
+[program:tailscale]
+command=%(ENV_HOME)s/bin/tailscaled
+  --tun=userspace-networking
+  --state=%(ENV_HOME)s/var/lib/tailscale/tailscaled.state
+  --socket=%(ENV_HOME)s/var/run/tailscaled.sock
+  --socks5-server={{ tailscale_proxy_listen }}
+  --outbound-http-proxy-listen={{ tailscale_proxy_listen }}
+{% if tailscale_port %}
+  --port={{ tailscale_port }}
+{% endif %}
+autostart=yes
+autorestart=yes
+# `startsecs` is set by Uberspace monitoring team, to prevent a broken service from looping
+startsecs=30

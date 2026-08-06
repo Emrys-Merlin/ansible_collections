@@ -1,0 +1,12 @@
+#!/bin/sh
+# Managed by Ansible — emrys_merlin.uberspace.tailscale. Do not edit on the host.
+#
+# tailscaled runs under supervisord with its control socket in $HOME, but the
+# tailscale CLI accepts the socket path only as --socket; it has no TS_SOCKET
+# environment variable. Anything that spawns a bare `tailscale` would therefore
+# look for the root-owned /var/run/tailscale/tailscaled.sock and fail.
+#
+# Uptime Kuma's built-in "Tailscale Ping" monitor does exactly that
+# (server/monitor-types/tailscale-ping.js spawns `tailscale ping --c 1 <host>`),
+# which is why this wrapper exists rather than a plain symlink.
+exec "$HOME/bin/tailscale-cli" --socket="$HOME/var/run/tailscaled.sock" "$@"

@@ -1,0 +1,140 @@
+---
+# tasks file for collections/ansible_collections/emrys_merlin/uberspace/roles/tailscale
+#
+# tailscaled in userspace-networking mode under the unprivileged uberspace
+# account. Kernel TUN is not an option here (no CAP_NET_ADMIN), and there is no
+# root, no package manager and no per-user systemd — hence the manual tarball
+# install and the supervisord unit. See plans/18-tailscale-uberspace.md.
+#
+# The play runs with gather_facts: false, so there is no ansible_env.HOME:
+# module paths use "~" (expanded on the target), shell commands use $HOME, and
+# the supervisord .ini uses %(ENV_HOME)s.
+
+- name: Create tailscale directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "~/var/lib/tailscale"
+    - "~/var/run"
+
+- name: Check if tailscale is already installed
+  ansible.builtin.stat:
+    path: "~/bin/tailscaled-{{ tailscale_version }}"
+  register: tailscaled_installed
+
+- name: Create temporary directory
+  ansible.builtin.tempfile:
+    state: directory
+  register: temp_dir
+  when: not tailscaled_installed.stat.exists
+
+- name: Download tailscale archive
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/tailscale_{{ tailscale_version }}_amd64.tgz"
+    dest: "{{ temp_dir.path }}/tailscale.tgz"
+    mode: "0644"
+  when: not tailscaled_installed.stat.exists
+
+- name: Extract tailscale archive
+  ansible.builtin.unarchive:
+    src: "{{ temp_dir.path }}/tailscale.tgz"
+    dest: "{{ temp_dir.path }}"
+    remote_src: true
+  when: not tailscaled_installed.stat.exists
+
+- name: Move tailscale binaries to bin directory
+  ansible.builtin.copy:
+    src: "{{ temp_dir.path }}/tailscale_{{ tailscale_version }}_amd64/{{ item }}"
+    dest: "~/bin/{{ item }}-{{ tailscale_version }}"
+    mode: "0755"
+    remote_src: true
+  loop:
+    - tailscaled
+    - tailscale
+  when: not tailscaled_installed.stat.exists
+
+- name: Delete temporary directory
+  ansible.builtin.file:
+    path: "{{ temp_dir.path }}"
+    state: absent
+  when: not tailscaled_installed.stat.exists
+
+- name: Update link to tailscaled binary
+  ansible.builtin.file:
+    src: "~/bin/tailscaled-{{ tailscale_version }}"
+    dest: "~/bin/tailscaled"
+    state: link
+  notify:
+    - Restart service
+
+- name: Update link to tailscale cli binary
+  ansible.builtin.file:
+    src: "~/bin/tailscale-{{ tailscale_version }}"
+    dest: "~/bin/tailscale-cli"
+    state: link
+
+# Deliberately a wrapper script rather than a symlink: the CLI takes the socket
+# path only as --socket (there is no TS_SOCKET environment variable), so anything
+# spawning a bare `tailscale` would look for the root-owned default socket.
+- name: Install the tailscale cli wrapper
+  ansible.builtin.template:
+    src: "templates/tailscale.sh.j2"
+    dest: "~/bin/tailscale"
+    mode: "0755"
+
+- name: Create supervisorctl tailscale service
+  ansible.builtin.template:
+    src: "templates/tailscale.ini.j2"
+    dest: "~/etc/services.d/tailscale.ini"
+    mode: "0644"
+  notify:
+    - Reread supervisorctl
+    - Restart service
+
+# The daemon has to be up before it can be asked whether it is authenticated.
+- name: Apply pending service changes before authenticating
+  ansible.builtin.meta: flush_handlers
+
+- name: Get tailscale backend state
+  ansible.builtin.shell:
+    cmd: "$HOME/bin/tailscale status --json"
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+  retries: 6
+  delay: 5
+  until: tailscale_status.rc == 0
+
+# Only runs when the node is not already on the tailnet, which is what keeps
+# this idempotent — `tailscale up` is not safe to re-run unconditionally.
+- name: Authenticate to the tailnet
+  ansible.builtin.shell:
+    cmd: >-
+      $HOME/bin/tailscale up
+      --authkey={{ tailscale_authkey | quote }}
+      --hostname={{ tailscale_hostname | quote }}
+  when: >-
+    tailscale_status.rc != 0
+    or (tailscale_status.stdout | from_json).BackendState != 'Running'
+  no_log: true
+
+- name: Re-read tailscale backend state
+  ansible.builtin.shell:
+    cmd: "$HOME/bin/tailscale status --json"
+  register: tailscale_final
+  changed_when: false
+
+- name: Assert the node is on the tailnet
+  ansible.builtin.assert:
+    that:
+      - (tailscale_final.stdout | from_json).BackendState == 'Running'
+    fail_msg: >-
+      tailscaled is up but the node is not Running (state:
+      {{ (tailscale_final.stdout | from_json).BackendState }}). If this is
+      NeedsLogin the auth key was rejected — check whether it has expired, and
+      note that key expiry is disabled per-node in the admin console.
+    success_msg: >-
+      Node {{ tailscale_hostname }} is on the tailnet as
+      {{ (tailscale_final.stdout | from_json).Self.TailscaleIPs | default(['?']) | join(', ') }}.

@@ -1,0 +1,11 @@
+galaxy_info:
+  author: Tim Adler
+  description: Userspace-networking tailscaled under an unprivileged uberspace account
+  license: MIT
+  min_ansible_version: "2.14"
+  galaxy_tags:
+    - tailscale
+    - uberspace
+    - vpn
+
+dependencies: []

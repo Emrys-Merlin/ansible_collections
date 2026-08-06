@@ -1,0 +1,16 @@
+---
+# defaults file for collections/ansible_collections/emrys_merlin/uberspace/roles/tailscale
+tailscale_version: "1.102.2"
+
+# Name the node registers under in the tailnet.
+tailscale_hostname: "{{ ansible_user }}-uberspace"
+
+# Port handed out by `uberspace port add`, to try for a direct (non-DERP) path.
+# Leave empty to stay relay-only — the daemon then omits --port entirely.
+# Never set this to 40740: that port is in use for mosh.
+tailscale_port: ""
+
+# SOCKS5 and HTTP CONNECT are multiplexed onto this single localhost listener.
+# This is what lets processes on uberspace reach the tailnet at all — in
+# userspace-networking mode there is no interface and no route to 100.64.0.0/10.
+tailscale_proxy_listen: "localhost:1055"
