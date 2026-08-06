@@ -57,7 +57,7 @@
     dest: "~/bin/prometheus"
     state: link
   notify:
-    - Restart service
+    - Restart prometheus service
 
 - name: Create prometheus configuration
   ansible.builtin.template:
@@ -65,13 +65,13 @@
     dest: "~/etc/prometheus/prometheus.yml"
     mode: "0644"
   notify:
-    - Restart service
+    - Restart prometheus service
 
 - name: Create supervisorctl prometheus service
   ansible.builtin.template:
     src: "templates/prometheus.ini.j2"
-    dest: "~/etc/supervisor.d/prometheus.ini"
+    dest: "~/etc/services.d/prometheus.ini"
     mode: "0644"
   notify:
-    - Reread supervisorctl
-    - Restart service
+    - Reread prometheus service
+    - Restart prometheus service

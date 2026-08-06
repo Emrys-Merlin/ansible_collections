@@ -1,11 +1,11 @@
 ---
 # handlers file for collections/ansible_collections/emrys_merlin/uberspace/roles/tailscale
-- name: Reread supervisorctl
+- name: Reread tailscale service
   community.general.supervisorctl:
     name: tailscale
     state: present
 
-- name: Restart service
+- name: Restart tailscale service
   community.general.supervisorctl:
     name: tailscale
     state: restarted

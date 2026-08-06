@@ -2,12 +2,12 @@
   ansible.builtin.shell:
     cmd: "${HOME}/bin/gitea -c ${HOME}/etc/gitea/app.ini migrate"
 
-- name: Reread supervisorctl
+- name: Reread gitea service
   community.general.supervisorctl:
     name: gitea
     state: present
 
-- name: Restart service
+- name: Restart gitea service
   community.general.supervisorctl:
     name: gitea
     state: restarted

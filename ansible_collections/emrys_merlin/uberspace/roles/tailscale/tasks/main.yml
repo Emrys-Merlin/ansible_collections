@@ -67,7 +67,7 @@
     dest: "~/bin/tailscaled"
     state: link
   notify:
-    - Restart service
+    - Restart tailscale service
 
 - name: Update link to tailscale cli binary
   ansible.builtin.file:
@@ -90,8 +90,8 @@
     dest: "~/etc/services.d/tailscale.ini"
     mode: "0644"
   notify:
-    - Reread supervisorctl
-    - Restart service
+    - Reread tailscale service
+    - Restart tailscale service
 
 # The daemon has to be up before it can be asked whether it is authenticated.
 - name: Apply pending service changes before authenticating

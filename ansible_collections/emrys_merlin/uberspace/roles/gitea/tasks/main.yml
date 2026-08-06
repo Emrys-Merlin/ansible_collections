@@ -18,7 +18,7 @@
   when: not gitea_binary.stat.exists
   notify:
     - Migrate database
-    - Restart service
+    - Restart gitea service
 
 - name: Link gitea binary
   ansible.builtin.file:
@@ -39,7 +39,7 @@
     dest: "${HOME}/etc/gitea/app.ini"
     mode: "644"
   notify:
-    - Restart service
+    - Restart gitea service
 
 - name: Create gitea data directory
   ansible.builtin.file:
@@ -53,8 +53,8 @@
     dest: "${HOME}/etc/services.d/gitea.ini"
     mode: "644"
   notify:
-    - Reread supervisorctl
-    - Restart service
+    - Reread gitea service
+    - Restart gitea service
 
 - name: Check if gitea is reachable
   ansible.builtin.uri:
