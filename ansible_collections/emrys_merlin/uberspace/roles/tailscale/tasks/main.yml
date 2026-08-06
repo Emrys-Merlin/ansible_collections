@@ -107,6 +107,37 @@
   delay: 5
   until: tailscale_status.rc == 0
 
+- name: Decide whether authentication is needed
+  ansible.builtin.set_fact:
+    tailscale_needs_login: >-
+      {{ tailscale_status.rc != 0
+         or (tailscale_status.stdout | from_json).BackendState != 'Running' }}
+
+# `tailscale up` runs under no_log, so a malformed key would otherwise surface
+# only as an opaque non-zero exit. Checking the shape first turns the common
+# paste mistakes into a message that says what is wrong without echoing the key.
+- name: Check the shape of the auth key
+  ansible.builtin.set_fact:
+    tailscale_authkey_wellformed: "{{ tailscale_authkey is match('^tskey-auth-[A-Za-z0-9]+-[A-Za-z0-9]+$') }}"
+    tailscale_authkey_length: "{{ tailscale_authkey | length }}"
+  no_log: true
+  when: tailscale_needs_login | bool
+
+- name: Assert the auth key is well formed
+  ansible.builtin.assert:
+    that:
+      - tailscale_authkey_wellformed | bool
+    fail_msg: >-
+      tailscale_authkey does not look like a Tailscale auth key. Expected
+      tskey-auth-<id>-<secret> with no other characters; got
+      {{ tailscale_authkey_length }} characters (a real key is around 62).
+      The usual cause is 1Password pre-filling a generated password and the
+      pasted key being appended to it rather than replacing it — check that the
+      password field of tailscale_authkey_uberspace holds only the key.
+      The key itself is deliberately not shown.
+    quiet: true
+  when: tailscale_needs_login | bool
+
 # Only runs when the node is not already on the tailnet, which is what keeps
 # this idempotent — `tailscale up` is not safe to re-run unconditionally.
 - name: Authenticate to the tailnet
@@ -115,9 +146,7 @@
       $HOME/bin/tailscale up
       --authkey={{ tailscale_authkey | quote }}
       --hostname={{ tailscale_hostname | quote }}
-  when: >-
-    tailscale_status.rc != 0
-    or (tailscale_status.stdout | from_json).BackendState != 'Running'
+  when: tailscale_needs_login | bool
   no_log: true
 
 - name: Re-read tailscale backend state
