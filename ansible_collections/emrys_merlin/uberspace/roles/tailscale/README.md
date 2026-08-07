@@ -29,6 +29,26 @@ SOCKS5 and HTTP CONNECT on one listener.
 Consumers should prefer **`socks5h`** over `socks5`, so hostnames are resolved by
 tailscaled (MagicDNS) instead of locally.
 
+## Subnet routes
+
+`tailscale_accept_routes` controls whether this node uses the routes its peers
+advertise. It works in userspace mode — measured, not assumed: with it on, a
+request through the SOCKS proxy to a plain LAN address (`192.168.178.192:9100`)
+succeeds, and with it off the same request is refused. tailscaled installs no
+route table entry here, so it is the proxy that resolves and forwards them.
+
+Two things to keep in mind:
+
+- **The flag cannot go on `tailscale up`.** That task only runs when the node is
+  not yet authenticated, so an already-Running node would never see it — it would
+  look correct and change nothing. The role uses `tailscale set` instead, guarded
+  by a comparison against the current `RouteAll` pref so a no-op run stays
+  `changed=0`.
+- **It widens reach from "my tailnet nodes" to "my whole LAN."** That is the
+  point, but it is also why the default is `false` and why the intended bound is
+  a Tailscale ACL on the node, not the flag. See
+  `plans/24-tailnet-subnet-routes-and-access.md`.
+
 ## `~/bin/tailscale` is a wrapper, not a symlink
 
 The CLI takes its socket path only as `--socket`; there is no `TS_SOCKET`
@@ -57,6 +77,7 @@ public IP and no NAT. Check with `tailscale status` — it prints `direct` or
 | `tailscale_version` | `1.102.2` | Pinned release; a bump re-downloads and relinks |
 | `tailscale_hostname` | `{{ ansible_user }}-uberspace` | Name in the tailnet |
 | `tailscale_port` | `""` | Fixed UDP port from `uberspace port add`; empty = relay-only |
+| `tailscale_accept_routes` | `false` | Use subnet routes advertised by peers — reaches the LAN, not just the tailnet |
 | `tailscale_proxy_listen` | `localhost:1055` | SOCKS5 + HTTP CONNECT listener |
 | `tailscale_authkey` | — | **Required.** From `group_vars/uberspace/secrets.yml` |
 

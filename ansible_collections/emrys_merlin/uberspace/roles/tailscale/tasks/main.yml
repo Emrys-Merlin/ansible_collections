@@ -149,6 +149,26 @@
   when: tailscale_needs_login | bool
   no_log: true
 
+# Route acceptance deliberately does not go on the `tailscale up` above: that task
+# is guarded by tailscale_needs_login, which is false for a node already Running,
+# so an existing node would never see the flag — it would look correct, run green
+# and change nothing. `tailscale set` is the supported way to change prefs on a
+# live node, and it applies immediately without a daemon restart.
+- name: Read current tailscale prefs
+  ansible.builtin.shell:
+    cmd: "$HOME/bin/tailscale debug prefs"
+  register: tailscale_prefs
+  changed_when: false
+
+# Compared against the current pref rather than run unconditionally, so a no-op
+# run reports changed=0 instead of claiming a change on every play.
+- name: Set route acceptance
+  ansible.builtin.shell:
+    cmd: "$HOME/bin/tailscale set --accept-routes={{ tailscale_accept_routes | bool | lower }}"
+  when: >-
+    (tailscale_prefs.stdout | from_json).RouteAll | default(false)
+    != (tailscale_accept_routes | bool)
+
 - name: Re-read tailscale backend state
   ansible.builtin.shell:
     cmd: "$HOME/bin/tailscale status --json"

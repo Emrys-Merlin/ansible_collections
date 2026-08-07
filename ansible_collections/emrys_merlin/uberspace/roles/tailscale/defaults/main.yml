@@ -10,6 +10,11 @@ tailscale_hostname: "{{ ansible_user }}-uberspace"
 # Never set this to 40740: that port is in use for mosh.
 tailscale_port: ""
 
+# Whether to use subnet routes advertised by peers. Off by default: turning it on
+# widens what this node can reach from "the tailnet" to "every LAN behind a subnet
+# router", so it is a per-host decision rather than a role-wide one.
+tailscale_accept_routes: false
+
 # SOCKS5 and HTTP CONNECT are multiplexed onto this single localhost listener.
 # This is what lets processes on uberspace reach the tailnet at all — in
 # userspace-networking mode there is no interface and no route to 100.64.0.0/10.
