@@ -1,0 +1,32 @@
+---
+# defaults file for collections/ansible_collections/emrys_merlin/uberspace/roles/uptime_kuma
+uptime_kuma_version: "2.5.0"
+
+# Uptime Kuma 2.x declares `engines.node: ">= 20.4.0"`, and the account's active
+# version is 18. Pinned by absolute path rather than by
+# `uberspace tools version use node 22`, which would change the version
+# account-wide. Uberspace builds these itself, so they run on this box's
+# glibc 2.17 even though upstream Node >= 20 does not.
+uptime_kuma_node_bin: "/opt/nodejs22/bin"
+
+# Localhost-only. Reachable from the tailnet because userspace tailscaled
+# forwards inbound connections to 127.0.0.1 — see plans/19-uptime-kuma-uberspace.md.
+# Do not move this to 0.0.0.0 and do not add an `uberspace web backend`: that
+# would put the admin login on the public internet.
+# 3001 is gitea and 3000 is grafana; pick something else if this ever moves.
+uptime_kuma_host: "127.0.0.1"
+uptime_kuma_port: 3002
+
+# Versioned install dir, with ~/opt/uptime-kuma symlinked at the current one.
+uptime_kuma_install_dir: "~/opt/uptime-kuma-{{ uptime_kuma_version }}"
+uptime_kuma_link_dir: "~/opt/uptime-kuma"
+
+# Deliberately outside the versioned install dir: this is the state that has to
+# survive a version bump. Holds db-config.json, uploads and screenshots.
+uptime_kuma_data_dir: "~/var/lib/uptime-kuma"
+
+# Uberspace grants ALL PRIVILEGES on `<user>\_%` only, so the prefix is required.
+uptime_kuma_db_name: "{{ ansible_user }}_uptimekuma"
+uptime_kuma_db_hostname: "127.0.0.1"
+uptime_kuma_db_port: 3306
+uptime_kuma_db_user: "{{ ansible_user }}"

@@ -1,0 +1,11 @@
+galaxy_info:
+  author: Tim Adler
+  description: Uptime Kuma under an unprivileged uberspace account, reachable over the tailnet
+  license: MIT
+  min_ansible_version: "2.14"
+  galaxy_tags:
+    - uptimekuma
+    - uberspace
+    - monitoring
+
+dependencies: []

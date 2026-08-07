@@ -1,0 +1,11 @@
+---
+# handlers file for collections/ansible_collections/emrys_merlin/uberspace/roles/uptime_kuma
+- name: Reread uptime-kuma service
+  community.general.supervisorctl:
+    name: uptime-kuma
+    state: present
+
+- name: Restart uptime-kuma service
+  community.general.supervisorctl:
+    name: uptime-kuma
+    state: restarted

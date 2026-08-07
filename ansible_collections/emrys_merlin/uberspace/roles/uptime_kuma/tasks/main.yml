@@ -1,0 +1,293 @@
+---
+# tasks file for collections/ansible_collections/emrys_merlin/uberspace/roles/uptime_kuma
+#
+# Uptime Kuma under the unprivileged uberspace account: no root, no package
+# manager, no per-user systemd, so a manual install plus a supervisord unit.
+# It binds localhost only and is reached over the tailnet, which works because
+# userspace tailscaled forwards inbound connections to 127.0.0.1.
+# See plans/19-uptime-kuma-uberspace.md.
+#
+# The play runs with gather_facts: false, so there is no ansible_env: module
+# paths use "~" (expanded on the target by Ansible's `path` argument type),
+# shell commands use $HOME, and the supervisord .ini uses %(ENV_HOME)s.
+
+# Uptime Kuma 2.x needs Node >= 20.4.0 and the account's active version is 18.
+# Checked rather than assumed, because /opt/nodejsNN appearing and disappearing
+# is entirely uberspace's call and the failure would otherwise be a confusing
+# supervisord restart loop.
+- name: Check the pinned node runtime is present
+  ansible.builtin.stat:
+    path: "{{ uptime_kuma_node_bin }}/node"
+  register: uptime_kuma_node
+
+- name: Assert the pinned node runtime is present
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_node.stat.exists
+    fail_msg: >-
+      {{ uptime_kuma_node_bin }}/node does not exist. Uptime Kuma
+      {{ uptime_kuma_version }} needs Node >= 20.4.0; check
+      `uberspace tools version list node` for what this host currently offers
+      and set uptime_kuma_node_bin accordingly.
+    quiet: true
+
+# The onepassword lookup returns "" for a field that is missing or empty rather
+# than failing, so an unfilled item would otherwise sail through and create an
+# admin user with a blank username — discovered only at the login screen.
+- name: Assert the admin credentials are set
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_admin_user | default('') | length > 0
+      - uptime_kuma_admin_password | default('') | length > 0
+      - uptime_kuma_db_password | default('') | length > 0
+    fail_msg: >-
+      One of uptime_kuma_admin_user, uptime_kuma_admin_password or
+      uptime_kuma_db_password is empty. These come from 1Password; check that
+      the `uptime_kuma_admin` item has both a username and a password filled in.
+      The values themselves are deliberately not shown.
+    quiet: true
+  no_log: true
+
+- name: Create uptime kuma directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: "{{ item.mode }}"
+  loop:
+    # The data dir holds db-config.json, so it is not world-readable.
+    - { path: "~/opt", mode: "0755" }
+    - { path: "{{ uptime_kuma_data_dir }}", mode: "0700" }
+
+- name: Check if uptime kuma {{ uptime_kuma_version }} is already installed
+  ansible.builtin.stat:
+    path: "{{ uptime_kuma_install_marker }}"
+  register: uptime_kuma_installed
+
+- name: Install uptime kuma {{ uptime_kuma_version }}
+  when: not uptime_kuma_installed.stat.exists
+  block:
+    - name: Create temporary directory
+      ansible.builtin.tempfile:
+        state: directory
+      register: uptime_kuma_temp
+
+    - name: Download uptime kuma source
+      ansible.builtin.get_url:
+        url: "https://github.com/louislam/uptime-kuma/archive/refs/tags/{{ uptime_kuma_version }}.tar.gz"
+        dest: "{{ uptime_kuma_temp.path }}/uptime-kuma.tar.gz"
+        mode: "0644"
+
+    - name: Extract uptime kuma source
+      ansible.builtin.unarchive:
+        src: "{{ uptime_kuma_temp.path }}/uptime-kuma.tar.gz"
+        dest: "~/opt"
+        remote_src: true
+
+    # The release ships the built frontend, so there is no vite build here — no
+    # dev dependencies, and no build-time memory spike on a shared host.
+    - name: Download the prebuilt frontend
+      ansible.builtin.get_url:
+        url: "https://github.com/louislam/uptime-kuma/releases/download/{{ uptime_kuma_version }}/dist.tar.gz"
+        dest: "{{ uptime_kuma_temp.path }}/dist.tar.gz"
+        mode: "0644"
+
+    - name: Extract the prebuilt frontend
+      ansible.builtin.unarchive:
+        src: "{{ uptime_kuma_temp.path }}/dist.tar.gz"
+        dest: "{{ uptime_kuma_install_dir }}"
+        remote_src: true
+
+    # The only native module is @louislam/sqlite3, which is a hard dependency
+    # even on MariaDB. Its prebuilt binary needs GLIBC_2.14, so it loads here;
+    # nothing on this host could compile it (gcc 4.8.5, python 3.6.8) if the
+    # prebuild ever stopped being published.
+    #
+    # Retried because a transient failure to fetch that prebuild is not a
+    # transient failure of this task: node-pre-gyp reacts to a dropped download
+    # by falling back to building from source, which spends two minutes proving
+    # that gcc 4.8.5 does not know -std=gnu++17 and then fails the run. Observed
+    # once, on a host that otherwise fetches the same URL in 50ms. `npm ci`
+    # removes node_modules before it starts, so every attempt is a clean one.
+    - name: Install production dependencies
+      ansible.builtin.shell:
+        cmd: "PATH={{ uptime_kuma_node_bin }}:$PATH npm ci --omit dev --no-audit --no-fund"
+        chdir: "{{ uptime_kuma_install_dir }}"
+      register: uptime_kuma_npm
+      until: uptime_kuma_npm.rc == 0
+      retries: 3
+      delay: 15
+      changed_when: true
+
+    # npm exiting 0 is not proof the native binding is usable: a source build
+    # that produces a binary for the wrong ABI also exits 0. This is the single
+    # part of the install that a version bump could plausibly break, so it is
+    # worth one second to find out here rather than in a supervisord restart loop.
+    - name: Verify the native sqlite3 binding loads
+      ansible.builtin.command:
+        cmd: "{{ uptime_kuma_node_bin }}/node -e \"require('@louislam/sqlite3')\""
+        chdir: "{{ uptime_kuma_install_dir }}"
+      changed_when: false
+
+    - name: Mark the install as complete
+      ansible.builtin.file:
+        path: "{{ uptime_kuma_install_marker }}"
+        state: touch
+        mode: "0644"
+
+  always:
+    - name: Delete temporary directory
+      ansible.builtin.file:
+        path: "{{ uptime_kuma_temp.path }}"
+        state: absent
+      when: uptime_kuma_temp.path is defined
+
+- name: Update link to the uptime kuma install
+  ansible.builtin.file:
+    src: "{{ uptime_kuma_install_dir }}"
+    dest: "{{ uptime_kuma_link_dir }}"
+    state: link
+  notify:
+    - Restart uptime-kuma service
+
+- name: Install the admin bootstrap script
+  ansible.builtin.copy:
+    src: files/create-admin.js
+    dest: "{{ uptime_kuma_install_dir }}/create-admin.js"
+    mode: "0755"
+
+# Driven through the mysql client rather than community.mysql, which needs
+# PyMySQL importable from whichever interpreter Ansible discovers. On this host
+# that is /usr/bin/python3.14 and only /usr/bin/python3 (3.6) has PyMySQL. The
+# alternatives are both worse: pinning ansible_python_interpreter to 3.6 picks a
+# Python that ansible-core no longer supports on targets, and pip-installing the
+# library into 3.14 re-arms the same trap the day uberspace ships 3.15.
+#
+# The client needs no credentials here at all — uberspace preconfigures
+# ~/.my.cnf (0600) with the account's user and password.
+- name: Check if the uptime kuma database exists
+  ansible.builtin.command:
+    argv:
+      - mysql
+      - --batch
+      - --skip-column-names
+      - -e
+      - "SHOW DATABASES LIKE '{{ uptime_kuma_db_name }}'"
+  register: uptime_kuma_db_check
+  changed_when: false
+
+- name: Create the uptime kuma database
+  ansible.builtin.command:
+    argv:
+      - mysql
+      - -e
+      - "CREATE DATABASE `{{ uptime_kuma_db_name }}`"
+  when: uptime_kuma_db_name not in uptime_kuma_db_check.stdout
+
+# Writing this file is what makes the setup wizard's database step disappear:
+# server/setup-database.js sets needSetup = false as soon as readDBConfig()
+# succeeds. Built from a dict via to_nice_json so the password is escaped
+# correctly whatever characters it contains.
+- name: Write the database configuration
+  ansible.builtin.copy:
+    content: |
+      {{ {
+           'type': 'mariadb',
+           'hostname': uptime_kuma_db_hostname,
+           'port': uptime_kuma_db_port,
+           'dbName': uptime_kuma_db_name,
+           'username': uptime_kuma_db_user,
+           'password': uptime_kuma_db_password,
+         } | to_nice_json }}
+    dest: "{{ uptime_kuma_data_dir }}/db-config.json"
+    mode: "0600"
+  no_log: true
+  notify:
+    - Restart uptime-kuma service
+
+- name: Create supervisorctl uptime kuma service
+  ansible.builtin.template:
+    src: templates/uptime-kuma.ini.j2
+    dest: "~/etc/services.d/uptime-kuma.ini"
+    mode: "0644"
+  notify:
+    - Reread uptime-kuma service
+    - Restart uptime-kuma service
+
+# The admin bootstrap needs a schema, and the schema is created by the server's
+# own knex migrations on first boot. So the service has to be up before the rest
+# of this file can run.
+- name: Apply pending service changes before bootstrapping the admin user
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for uptime kuma to listen
+  ansible.builtin.wait_for:
+    host: "{{ uptime_kuma_host }}"
+    port: "{{ uptime_kuma_port }}"
+    timeout: 180
+
+# Listening is not the same as ready: while migrations run, Uptime Kuma serves a
+# holding page from a temporary server on the same port. Wait for the schema
+# itself rather than for the socket.
+- name: Wait for the database schema
+  ansible.builtin.command:
+    argv:
+      - mysql
+      - --batch
+      - --skip-column-names
+      - "{{ uptime_kuma_db_name }}"
+      - -e
+      - "SHOW TABLES LIKE 'user'"
+  register: uptime_kuma_schema
+  until: "'user' in uptime_kuma_schema.stdout"
+  retries: 30
+  delay: 10
+  changed_when: false
+
+# no_log because the credentials are passed through the task environment, which
+# is visible with -vvv. The script prints only CREATED or UNCHANGED on success
+# and a bare error message on failure, so the assert below can safely surface
+# its output.
+- name: Create the uptime kuma admin user
+  ansible.builtin.command:
+    cmd: "{{ uptime_kuma_node_bin }}/node create-admin.js"
+    chdir: "{{ uptime_kuma_install_dir }}"
+  environment:
+    KUMA_DB_HOSTNAME: "{{ uptime_kuma_db_hostname }}"
+    KUMA_DB_PORT: "{{ uptime_kuma_db_port }}"
+    KUMA_DB_NAME: "{{ uptime_kuma_db_name }}"
+    KUMA_DB_USERNAME: "{{ uptime_kuma_db_user }}"
+    KUMA_DB_PASSWORD: "{{ uptime_kuma_db_password }}"
+    KUMA_ADMIN_USERNAME: "{{ uptime_kuma_admin_user }}"
+    KUMA_ADMIN_PASSWORD: "{{ uptime_kuma_admin_password }}"
+  register: uptime_kuma_admin
+  changed_when: "'CREATED' in uptime_kuma_admin.stdout"
+  failed_when: false
+  no_log: true
+  notify:
+    - Restart uptime-kuma service
+
+- name: Assert the admin user exists
+  ansible.builtin.assert:
+    that:
+      - uptime_kuma_admin.rc == 0
+    fail_msg: >-
+      Could not bootstrap the Uptime Kuma admin user (rc
+      {{ uptime_kuma_admin.rc }}): {{ uptime_kuma_admin.stderr | default('') }}
+      {{ uptime_kuma_admin.stdout | default('') }}
+    quiet: true
+
+# needSetup is computed once at startup, so an instance that came up with an
+# empty user table keeps serving the setup page until it is bounced.
+- name: Apply the admin user
+  ansible.builtin.meta: flush_handlers
+
+- name: Check uptime kuma is serving
+  ansible.builtin.uri:
+    url: "http://{{ uptime_kuma_host }}:{{ uptime_kuma_port }}/"
+    method: GET
+    status_code: 200
+  register: uptime_kuma_serving
+  retries: 12
+  delay: 10
+  until: uptime_kuma_serving.status == 200
+  changed_when: false

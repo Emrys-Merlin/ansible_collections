@@ -1,0 +1,18 @@
+[program:uptime-kuma]
+# knex resolves its migrations directory relative to the working directory, so
+# this has to be the install dir and not something incidental.
+directory={{ uptime_kuma_link_dir_sv }}
+command={{ uptime_kuma_node_bin }}/node {{ uptime_kuma_link_dir_sv }}/server/server.js
+  --host={{ uptime_kuma_host }}
+  --port={{ uptime_kuma_port }}
+  --data-dir={{ uptime_kuma_data_dir_sv }}/
+# `~/bin` is on PATH for the Tailscale Ping monitor type, which spawns a bare
+# `tailscale` and relies on the wrapper installed by the tailscale role.
+# Database credentials deliberately do NOT appear here — they live in
+# db-config.json (0600). supervisord treats `%` as an expansion character, so a
+# password containing one would silently break this unit.
+environment=PATH="%(ENV_HOME)s/bin:%(ENV_PATH)s"
+autostart=yes
+autorestart=yes
+# `startsecs` is set by Uberspace monitoring team, to prevent a broken service from looping
+startsecs=30
