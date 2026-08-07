@@ -97,11 +97,16 @@
 - name: Apply pending service changes before authenticating
   ansible.builtin.meta: flush_handlers
 
+# check_mode: false on all three read-only queries below. They change nothing, and
+# without it a --check run skips them, leaves .stdout undefined, and dies in the
+# from_json expressions that read it — so a dry run would fail against a perfectly
+# healthy host.
 - name: Get tailscale backend state
   ansible.builtin.shell:
     cmd: "$HOME/bin/tailscale status --json"
   register: tailscale_status
   changed_when: false
+  check_mode: false
   failed_when: false
   retries: 6
   delay: 5
@@ -159,6 +164,7 @@
     cmd: "$HOME/bin/tailscale debug prefs"
   register: tailscale_prefs
   changed_when: false
+  check_mode: false
 
 # Compared against the current pref rather than run unconditionally, so a no-op
 # run reports changed=0 instead of claiming a change on every play.
@@ -174,6 +180,7 @@
     cmd: "$HOME/bin/tailscale status --json"
   register: tailscale_final
   changed_when: false
+  check_mode: false
 
 - name: Assert the node is on the tailnet
   ansible.builtin.assert:

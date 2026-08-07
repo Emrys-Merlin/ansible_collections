@@ -89,6 +89,17 @@ The install is skipped when `~/bin/tailscaled-<version>` already exists, and
 unconditionally. The role ends with an assert on the backend state, so a
 rejected or expired auth key fails the play rather than passing quietly.
 
+Because `tailscale up` is guarded that way, a repeat run against a live node
+never re-authenticates and so cannot disturb the node's identity or its tags.
+
+## `--check` safety
+
+The three read-only queries (`tailscale status --json` twice, `tailscale debug
+prefs` once) carry `check_mode: false`. **Do not remove it.** Under `--check` a
+`shell` task is skipped, its `stdout` is never set, and every `from_json` that
+reads it fails — so a dry run would error out against a completely healthy host
+rather than reporting no changes.
+
 ## Key expiry
 
 Auth keys expire (90 days maximum) and so do node keys. After the first
