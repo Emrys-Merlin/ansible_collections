@@ -45,6 +45,7 @@
     mode: "755"
   when: not gitea_binary.stat.exists
   notify:
+    - Stop gitea service
     - Migrate database
     - Restart gitea service
 
@@ -157,6 +158,15 @@
   notify:
     - Reread gitea service
     - Restart gitea service
+
+# Everything below probes a *running, migrated* gitea, so the handlers have to
+# have run by here rather than at the end of the play. On a version bump the
+# symlink swap above has already repointed ${HOME}/bin/gitea at the new binary,
+# so without this flush "Check admin user" would run the new binary against a
+# database that has not been migrated yet — and on a rc of 1 the task after it
+# would go on to try creating an admin user in it.
+- name: Apply the binary swap and migration before probing
+  ansible.builtin.meta: flush_handlers
 
 # check_mode: false on both read-only probes below. They change nothing, and
 # without it --check skips them, leaves .status / .rc unset, and the `when` on

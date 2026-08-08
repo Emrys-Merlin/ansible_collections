@@ -1,3 +1,24 @@
+# Handlers run in the order they are DEFINED here, not the order they are
+# notified. That ordering is load-bearing: stop before migrate, migrate before
+# restart. Do not reorder these without reading the comment on the stop handler.
+
+# Without this, a version bump ran `gitea migrate` while the old gitea was still
+# up and holding connections to the database it was rewriting. Survivable by
+# luck on a point release; not something to rely on for the Gitea → Forgejo
+# schema migration. See plans/22-forgejo-tailnet.md, "Blocker found 2026-08-08".
+#
+# Tolerant of an unknown process because on a first install supervisord has not
+# been told about gitea yet — nothing to stop, and that is not an error. An
+# already-stopped process needs no guard: the module treats that as changed=false.
+- name: Stop gitea service
+  community.general.supervisorctl:
+    name: gitea
+    state: stopped
+  register: gitea_stop
+  failed_when:
+    - gitea_stop is failed
+    - "'no such process' not in (gitea_stop.msg | default(''))"
+
 - name: Migrate database
   ansible.builtin.shell:
     cmd: "${HOME}/bin/gitea -c ${HOME}/etc/gitea/app.ini migrate"
@@ -7,6 +28,9 @@
     name: gitea
     state: present
 
+# `state: restarted` runs `supervisorctl update` and then `restart`, and
+# `restart` on a process the stop handler left down still reports "started", so
+# this brings gitea back up after the sequence above.
 - name: Restart gitea service
   community.general.supervisorctl:
     name: gitea

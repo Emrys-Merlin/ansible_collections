@@ -31,6 +31,20 @@ The consequence to be aware of: anything configured through the gitea UI that
 lands in `app.ini` persists and is invisible to this repo. The role does not
 own the whole file, only the keys it names.
 
+Upgrades and handler order
+--------------------------
+
+Bumping `gitea_version` downloads the new binary, repoints the `~/bin/gitea`
+symlink at it, and notifies **Stop → Migrate → Restart**. Handlers run in the
+order they are *defined* in `handlers/main.yml`, not the order they are
+notified, so that file's ordering is load-bearing — do not reorder it.
+
+The stop matters: without it the role ran `gitea migrate` while the old server
+was still up and connected to the database it was rewriting. `tasks/main.yml`
+also flushes handlers before the reachability and admin-user probes, because by
+that point the symlink already points at the new binary and those probes would
+otherwise run it against an un-migrated database.
+
 Database
 --------
 
