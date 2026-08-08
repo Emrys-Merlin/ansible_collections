@@ -166,6 +166,18 @@
     # with "no database host defined" mid-migration. Matches roles/uptime_kuma,
     # which has always set 127.0.0.1:3306 explicitly on this host.
     - { section: database, option: HOST, value: "127.0.0.1:3306" }
+    # Pinned so the target is this role's decision and cannot drift again. The
+    # tables predating the forgejo migration are utf8mb4_general_ci; the ones
+    # forgejo's migrations created or rebuilt inherited the *database* default,
+    # utf8mb4_unicode_ci. A join across the two — branch.name against
+    # pull_request.head_branch — then fails with "Illegal mix of collations",
+    # which surfaced as a 500 on every repository page while the front page and
+    # the API stayed healthy. Left unset, gitea only warns about this at startup.
+    #
+    # Setting this does not convert anything; `gitea doctor convert` does, and it
+    # is a one-off repair run by hand rather than a task here. See
+    # plans/22-forgejo-tailnet.md, "The 500 on repository pages".
+    - { section: database, option: CHARSET_COLLATION, value: utf8mb4_unicode_ci }
     - { section: database, option: NAME, value: "{{ gitea_db_name }}" }
     - { section: database, option: USER, value: "{{ ansible_user }}" }
     - { section: security, option: INSTALL_LOCK, value: "true" }

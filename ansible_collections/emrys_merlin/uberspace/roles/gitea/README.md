@@ -49,15 +49,15 @@ this with a template.** Gitea writes generated state back into the same file —
 on this host `WORK_PATH`, `[server] LFS_JWT_SECRET`, `[security] INTERNAL_TOKEN`
 and `[oauth2] JWT_SECRET` — and a template silently drops all of it, which breaks
 LFS auth, gitea's internal API and every issued OAuth2 token. The role owns the
-27 options listed in `tasks/main.yml` and deliberately leaves everything else
+28 options listed in `tasks/main.yml` and deliberately leaves everything else
 alone. The file is `0600`; it holds four secrets.
 
-Several of those 27 are pinned specifically because upstream's default for them
+Several of those 28 are pinned specifically because upstream's default for them
 **changed underneath a working deployment** — `[repository] ROOT` across the
-gitea → forgejo fork, `[database] HOST` at v15, `[server] HTTP_ADDR` never having
-been set at all. Naming a value here makes it this role's decision rather than
-the binary's. Do not "tidy up" a key by deleting it because it matches the
-current default.
+gitea → forgejo fork, `[database] HOST` at v15, `[server] HTTP_ADDR` and
+`[database] CHARSET_COLLATION` never having been set at all. Naming a value here
+makes it this role's decision rather than the binary's. Do not "tidy up" a key by
+deleting it because it matches the current default.
 
 The consequence to be aware of: anything configured through the gitea UI that
 lands in `app.ini` persists and is invisible to this repo. The role does not
@@ -91,3 +91,16 @@ run with it. The client needs no credentials, because uberspace preconfigures
 
 The read-only `SHOW DATABASES LIKE` check carries `check_mode: false`; without
 it a `--check` run skips the task and the `when` that reads its `stdout` fails.
+
+`[database] CHARSET_COLLATION` is pinned to `utf8mb4_unicode_ci`. **Setting it
+converts nothing** — it only decides what new tables get, so it stops the schema
+splitting again. Repairing a schema that has already split is
+`gitea doctor convert`, run by hand with the service stopped; that is not a task
+here because it is a one-off and it rewrites every table.
+
+The split is worth recognising: a mix of `utf8mb4_general_ci` and
+`utf8mb4_unicode_ci` tables makes MariaDB reject joins across them with
+`Error 1267 (HY000): Illegal mix of collations`, which surfaces as a **500 on
+repository pages while the front page and the API stay healthy**. With this
+option unset, gitea only warns about it at startup. See
+`plans/22-forgejo-tailnet.md`, "The 500 on repository pages".
