@@ -1,9 +1,37 @@
-- name: Create gitea database
-  community.mysql.mysql_db:
-    name: "{{ gitea_db_name }}"
-    state: present
-    login_user: "{{ ansible_user }}"
-    login_password: "{{ gitea_db_password }}"
+# Driven through the mysql client rather than community.mysql, which needs
+# PyMySQL importable from whichever interpreter Ansible discovers. On this host
+# that is /usr/bin/python3.14 and only /usr/bin/python3 (3.6) carries PyMySQL, so
+# this task failed and took the whole uberspace playbook down with it. Pinning
+# ansible_python_interpreter to 3.6 and pip-installing PyMySQL into 3.14 are both
+# worse; see plans/22-forgejo-tailnet.md, part A.
+#
+# No credentials are passed at all — uberspace preconfigures ~/.my.cnf (0600)
+# with the account's user and password. gitea_db_password is still needed by
+# app.ini, where gitea itself connects.
+#
+# check_mode: false because the query changes nothing, and without it a --check
+# run skips the task, leaves .stdout undefined and dies in the `when` below.
+- name: Check if the gitea database exists
+  ansible.builtin.command:
+    argv:
+      - mysql
+      - --batch
+      - --skip-column-names
+      - -e
+      - "SHOW DATABASES LIKE '{{ gitea_db_name }}'"
+  register: gitea_db_check
+  changed_when: false
+  check_mode: false
+
+# Guarded on the check above rather than using CREATE DATABASE IF NOT EXISTS,
+# which reports changed on every run.
+- name: Create the gitea database
+  ansible.builtin.command:
+    argv:
+      - mysql
+      - -e
+      - "CREATE DATABASE `{{ gitea_db_name }}`"
+  when: gitea_db_name not in gitea_db_check.stdout
 
 - name: Check if gitea binary exists {{ gitea_version }}
   ansible.builtin.stat:
