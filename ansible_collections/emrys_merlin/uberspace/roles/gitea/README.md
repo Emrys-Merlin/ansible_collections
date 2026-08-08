@@ -11,10 +11,35 @@ Example Playbook
         - role: emrys_merlin.uberspace.gitea
           gitea_db_name: "{{ ansible_user }}_gitea"
           gitea_port: 3001
-          gitea_url_path: "/gitea"
-          gitea_url: "https://{{ ansible_user }}.uber.space{{ gitea_url_path }}"
+          gitea_root_url: "http://<node>.<tailnet>.ts.net:3001/"
           gitea_admin_user: "Retrieve from vault"
           gitea_admin_password: "Retrieve from vault"
+
+Reachability
+------------
+
+Gitea binds **`127.0.0.1` only** (`gitea_host`) and is reached over the tailnet,
+the same way `roles/uptime_kuma` is: userspace `tailscaled` forwards inbound
+tailnet connections to localhost. The role actively **removes** the
+`uberspace web backend` for `gitea_web_backend_path`, so a public route does not
+come back by accident.
+
+`gitea_root_url` has no default. It is what clone URLs, LFS endpoints and webhook
+payloads are built from, so it must be the address a client actually uses — the
+node's `ts.net` name, not `gitea_host`. A public-looking default here would put
+the instance back on the internet on any host that forgot to set it, so the role
+asserts instead of guessing.
+
+Two things this does **not** cover, and should not be mistaken for coverage:
+
+- **SSH clone stays reachable publicly.** It goes through uberspace's own `sshd`
+  on port 22, which is not this account's to close, so
+  `ssh://<user>@<host>.uber.space/...` keeps working. The UI does advertise the
+  *tailnet* SSH URL — forgejo derives the SSH host from `ROOT_URL` when
+  `SSH_DOMAIN` is unset, and both were measured to clone successfully — but
+  advertising one address does not close the other.
+- **Plain HTTP is not plaintext on the wire** — WireGuard encrypts it end to end.
+  The cost is browser warnings and no padlock, not exposure.
 
 Configuration (`app.ini`)
 -------------------------
@@ -24,8 +49,15 @@ this with a template.** Gitea writes generated state back into the same file —
 on this host `WORK_PATH`, `[server] LFS_JWT_SECRET`, `[security] INTERNAL_TOKEN`
 and `[oauth2] JWT_SECRET` — and a template silently drops all of it, which breaks
 LFS auth, gitea's internal API and every issued OAuth2 token. The role owns the
-23 options listed in `tasks/main.yml` and deliberately leaves everything else
+27 options listed in `tasks/main.yml` and deliberately leaves everything else
 alone. The file is `0600`; it holds four secrets.
+
+Several of those 27 are pinned specifically because upstream's default for them
+**changed underneath a working deployment** — `[repository] ROOT` across the
+gitea → forgejo fork, `[database] HOST` at v15, `[server] HTTP_ADDR` never having
+been set at all. Naming a value here makes it this role's decision rather than
+the binary's. Do not "tidy up" a key by deleting it because it matches the
+current default.
 
 The consequence to be aware of: anything configured through the gitea UI that
 lands in `app.ini` persists and is invisible to this repo. The role does not

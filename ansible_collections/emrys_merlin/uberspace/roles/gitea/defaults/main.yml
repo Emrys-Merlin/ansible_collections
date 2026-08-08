@@ -24,3 +24,20 @@ gitea_download_urls:
   forgejo: "https://codeberg.org/forgejo/forgejo/releases/download/v{{ gitea_version }}/forgejo-{{ gitea_version }}-linux-amd64"
 
 gitea_download_url: "{{ gitea_download_urls[gitea_flavour] }}"
+
+# Bind localhost only. This is reachable from the tailnet because userspace
+# tailscaled forwards inbound connections to 127.0.0.1 — measured on this host,
+# not assumed: roles/uptime_kuma binds 127.0.0.1:3002 exactly this way and
+# answers over the node's ts.net name from the control node.
+#
+# Do NOT set this to 0.0.0.0, and do not add an `uberspace web backend` for
+# gitea. Either one puts a git host holding every private repository back on the
+# public internet, which is the whole of plan 22 part C undone.
+gitea_host: "127.0.0.1"
+
+# The address a *client* uses, which is not gitea_host: gitea builds clone URLs,
+# LFS endpoints and webhook payloads out of ROOT_URL, so it has to be the tailnet
+# name. Set it per host — there is deliberately no working default here, because
+# a public-looking fallback would silently undo part C on a host that forgot to
+# set it. The role asserts on it instead.
+gitea_root_url: ""

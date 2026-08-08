@@ -87,6 +87,19 @@
     quiet: true
   no_log: true
 
+# Not folded into the assert above, which is no_log — this message is worth
+# seeing. Empty rather than absent because defaults/main.yml has to name it to
+# document it; either way the run stops before writing a broken ROOT_URL.
+- name: Assert the root URL is set
+  ansible.builtin.assert:
+    that:
+      - gitea_root_url | default('') | length > 0
+    fail_msg: >-
+      gitea_root_url is empty. It is the address clients use — the tailnet name
+      of this host, e.g. http://<node>.<tailnet>.ts.net:{{ gitea_port }}/ — and
+      has no default on purpose. Set it in the inventory.
+    quiet: true
+
 # app.ini is deliberately NOT templated wholesale, and must not go back to
 # being. Gitea writes generated state back into this file, and a template task
 # destroys it silently. On this host that is WORK_PATH, [server] LFS_JWT_SECRET,
@@ -115,8 +128,22 @@
     # API call returned 500 "no such file or directory". Naming it here makes
     # the location this role's decision instead of the upstream binary's.
     - { section: repository, option: ROOT, value: "/home/{{ ansible_user }}/var/gitea/gitea-repositories" }
+    # Left as the public uberspace host, and after part C it has no visible
+    # consumer left: ROOT_URL below no longer interpolates it, and the SSH clone
+    # URL does *not* follow it either — measured, the API advertises
+    # ssh://<user>@<tailnet-name>/... with DOMAIN still set to the line below, so
+    # forgejo derives the SSH host from ROOT_URL when SSH_DOMAIN is unset.
+    # Kept rather than removed because this role does not own the whole file and
+    # deleting a key it has always written is a bigger change than it looks.
     - { section: server, option: DOMAIN, value: "{{ ansible_user }}.uber.space" }
-    - { section: server, option: ROOT_URL, value: "https://%(DOMAIN)s{{ gitea_url_path }}" }
+    # The tailnet name, not gitea_host: clone URLs, LFS endpoints and webhook
+    # payloads are all built from this, so it must be what a client can reach.
+    - { section: server, option: ROOT_URL, value: "{{ gitea_root_url }}" }
+    # Localhost-only, so nothing reaches gitea except over the tailnet. Before
+    # part C this key was absent, which means all interfaces — the instance was
+    # answering on the public IP directly as well as through the web backend, so
+    # deleting the backend alone would not have taken it off the internet.
+    - { section: server, option: HTTP_ADDR, value: "{{ gitea_host }}" }
     # Privacy: no gravatar or CDN fetches off this box.
     - { section: server, option: OFFLINE_MODE, value: "true" }
     - { section: server, option: LFS_START_SERVER, value: "true" }
@@ -205,19 +232,40 @@
 # without it --check skips them, leaves .status / .rc unset, and the `when` on
 # the task after each one dies on a healthy host. Same fix as 636330a made to
 # the tailscale role.
+# Probed at gitea_host, not gitea_root_url: this runs on the target and is
+# asking "did the service come back up", which is a local question. Asking it
+# through the tailnet would conflate a dead gitea with a dead tailscaled.
+#
+# Retried because the restart handler has just fired. supervisorctl returns as
+# soon as the process is spawned, and forgejo opens its listener a moment later.
 - name: Check if gitea is reachable
   ansible.builtin.uri:
-    url: "{{ gitea_url }}"
+    url: "http://{{ gitea_host }}:{{ gitea_port }}/"
     method: HEAD
+    status_code: 200
   register: uri_test
+  until: uri_test.status == 200
+  retries: 12
+  delay: 5
   changed_when: false
   check_mode: false
-  failed_when: uri_test.status is undefined or uri_test.status <= 0
 
-- name: Start web backend
-  ansible.builtin.shell:
-    cmd: "uberspace web backend set {{ gitea_url_path }} --http --remove-prefix --port {{ gitea_port }}"
-  when: uri_test.status > 400
+# The reverse of the task that used to live here, which created this backend.
+# Gitea is reached over the tailnet now, so a public route to it is the thing to
+# remove. Guarded on the listing rather than run unconditionally because
+# `uberspace web backend del` fails on a path that is not configured, so an
+# unguarded run would report changed every time and fail on the second one.
+- name: Check for a public web backend
+  ansible.builtin.command:
+    cmd: uberspace web backend list
+  register: gitea_web_backends
+  changed_when: false
+  check_mode: false
+
+- name: Remove the public web backend
+  ansible.builtin.command:
+    cmd: "uberspace web backend del {{ gitea_web_backend_path }}"
+  when: gitea_web_backend_path ~ ' http:' in gitea_web_backends.stdout
 
 - name: Check admin user
   ansible.builtin.shell:

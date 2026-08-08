@@ -1,4 +1,8 @@
 gitea_db_name: "{{ ansible_user }}_gitea"
 gitea_port: 3001
-gitea_url_path: "/gitea"
-gitea_url: "https://{{ ansible_user }}.uber.space{{ gitea_url_path }}"
+
+# The path gitea used to be served on publicly. The role now ensures no
+# `uberspace web backend` exists for it — this is the thing to *remove*, not the
+# place to reach gitea. See gitea_root_url in defaults/main.yml for that, and
+# plans/22-forgejo-tailnet.md part C for why.
+gitea_web_backend_path: "/gitea"
