@@ -122,7 +122,23 @@
     - { section: server, option: LFS_START_SERVER, value: "true" }
     - { section: server, option: HTTP_PORT, value: "{{ gitea_port }}" }
     - { section: server, option: APP_DATA_PATH, value: "/home/{{ ansible_user }}/var/gitea" }
+    # Forgejo v14+ validates ~/.ssh/authorized_keys at startup and REFUSES TO
+    # START if it finds entries it did not write. On shared hosting that file is
+    # also the account's own login path: here 7 of its 9 keys are the owner's,
+    # and only 2 carry gitea's forced command. Upstream's other remedy — delete
+    # the file and let it be regenerated — would lock the owner out of the host,
+    # so it is not an option. Upstream calls this setting a temporary
+    # workaround; on uberspace it is the permanent correct answer.
+    #
+    # DISABLE_SSH would also silence the check, but gitea manages two real keys
+    # here, so turning SSH off is not the same no-op.
+    - { section: server, option: SSH_ALLOW_UNEXPECTED_AUTHORIZED_KEYS, value: "true" }
     - { section: database, option: DB_TYPE, value: mysql }
+    # Named for the same reason as [repository] ROOT above: it used to be left
+    # to the built-in default and forgejo v15 stopped supplying one, failing
+    # with "no database host defined" mid-migration. Matches roles/uptime_kuma,
+    # which has always set 127.0.0.1:3306 explicitly on this host.
+    - { section: database, option: HOST, value: "127.0.0.1:3306" }
     - { section: database, option: NAME, value: "{{ gitea_db_name }}" }
     - { section: database, option: USER, value: "{{ ansible_user }}" }
     - { section: security, option: INSTALL_LOCK, value: "true" }
