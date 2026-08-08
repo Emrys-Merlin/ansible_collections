@@ -16,6 +16,21 @@ Example Playbook
           gitea_admin_user: "Retrieve from vault"
           gitea_admin_password: "Retrieve from vault"
 
+Configuration (`app.ini`)
+-------------------------
+
+`app.ini` is edited key-by-key with `community.general.ini_file`. **Never replace
+this with a template.** Gitea writes generated state back into the same file —
+on this host `WORK_PATH`, `[server] LFS_JWT_SECRET`, `[security] INTERNAL_TOKEN`
+and `[oauth2] JWT_SECRET` — and a template silently drops all of it, which breaks
+LFS auth, gitea's internal API and every issued OAuth2 token. The role owns the
+23 options listed in `tasks/main.yml` and deliberately leaves everything else
+alone. The file is `0600`; it holds four secrets.
+
+The consequence to be aware of: anything configured through the gitea UI that
+lands in `app.ini` persists and is invisible to this repo. The role does not
+own the whole file, only the keys it names.
+
 Database
 --------
 

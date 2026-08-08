@@ -61,11 +61,85 @@
     state: directory
     mode: "755"
 
-- name: Copy config template
-  ansible.builtin.template:
-    src: templates/app.ini.j2
-    dest: "${HOME}/etc/gitea/app.ini"
-    mode: "644"
+# The onepassword lookup returns "" for a missing or empty field rather than
+# failing, so without this an unfilled item would be written straight into
+# app.ini and break the running instance at the next restart.
+- name: Assert the gitea secrets are set
+  ansible.builtin.assert:
+    that:
+      - gitea_db_password | default('') | length > 0
+      - gitea_secret_key | default('') | length > 0
+    fail_msg: >-
+      gitea_db_password or gitea_secret_key is empty. Both come from 1Password
+      (items `gitea_db_password` and `gitea_secret_key`, field `password`).
+      The values themselves are deliberately not shown.
+    quiet: true
+  no_log: true
+
+# app.ini is deliberately NOT templated wholesale, and must not go back to
+# being. Gitea writes generated state back into this file, and a template task
+# destroys it silently. On this host that is WORK_PATH, [server] LFS_JWT_SECRET,
+# [security] INTERNAL_TOKEN and [oauth2] JWT_SECRET — regenerating those breaks
+# LFS auth, gitea's internal API, and every issued OAuth2 token respectively.
+# ini_file touches only the options named below and leaves the rest alone.
+#
+# The old template also declared mode 644 on a file holding four secrets. The
+# live file is 600, so a run would have loosened it; hence 0600 here.
+#
+# The `; ...` comments that used to sit on these lines have moved into this file
+# instead. Gitea rewrites app.ini and relocates inline comments onto their own
+# line, so the role could never have kept them stable anyway.
+- name: Configure gitea
+  community.general.ini_file:
+    path: "${HOME}/etc/gitea/app.ini"
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    mode: "0600"
+  loop:
+    - { section: server, option: DOMAIN, value: "{{ ansible_user }}.uber.space" }
+    - { section: server, option: ROOT_URL, value: "https://%(DOMAIN)s{{ gitea_url_path }}" }
+    # Privacy: no gravatar or CDN fetches off this box.
+    - { section: server, option: OFFLINE_MODE, value: "true" }
+    - { section: server, option: LFS_START_SERVER, value: "true" }
+    - { section: server, option: HTTP_PORT, value: "{{ gitea_port }}" }
+    - { section: server, option: APP_DATA_PATH, value: "/home/{{ ansible_user }}/var/gitea" }
+    - { section: database, option: DB_TYPE, value: mysql }
+    - { section: database, option: NAME, value: "{{ gitea_db_name }}" }
+    - { section: database, option: USER, value: "{{ ansible_user }}" }
+    - { section: security, option: INSTALL_LOCK, value: "true" }
+    - { section: security, option: MIN_PASSWORD_LENGTH, value: "8" }
+    # Length over character classes: memorable but still secure passwords.
+    - { section: security, option: PASSWORD_COMPLEXITY, value: lower }
+    # Only admins create users.
+    - { section: service, option: DISABLE_REGISTRATION, value: "true" }
+    - { section: service, option: SHOW_REGISTRATION_BUTTON, value: "false" }
+    - { section: service, option: REGISTER_EMAIL_CONFIRM, value: "true" }
+    # One of public, limited, private.
+    - { section: service, option: DEFAULT_ORG_VISIBILITY, value: private }
+    - { section: service, option: DEFAULT_KEEP_EMAIL_PRIVATE, value: "true" }
+    - { section: service, option: NO_REPLY_ADDRESS, value: "noreply.{{ ansible_user }}.uber.space" }
+    - { section: mailer, option: ENABLED, value: "true" }
+    - { section: mailer, option: MAILER_TYPE, value: sendmail }
+    - { section: mailer, option: FROM, value: "{{ ansible_user }}@uber.space" }
+  loop_control:
+    label: "[{{ item.section }}] {{ item.option }}"
+  notify:
+    - Restart gitea service
+
+# Split out of the loop above purely so no_log can cover these two without
+# blanking the task list for the twenty settings that are not secret.
+- name: Configure gitea secrets
+  community.general.ini_file:
+    path: "${HOME}/etc/gitea/app.ini"
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    mode: "0600"
+  loop:
+    - { section: database, option: PASSWD, value: "{{ gitea_db_password }}" }
+    - { section: security, option: SECRET_KEY, value: "{{ gitea_secret_key }}" }
+  no_log: true
   notify:
     - Restart gitea service
 
@@ -84,11 +158,17 @@
     - Reread gitea service
     - Restart gitea service
 
+# check_mode: false on both read-only probes below. They change nothing, and
+# without it --check skips them, leaves .status / .rc unset, and the `when` on
+# the task after each one dies on a healthy host. Same fix as 636330a made to
+# the tailscale role.
 - name: Check if gitea is reachable
   ansible.builtin.uri:
     url: "{{ gitea_url }}"
     method: HEAD
   register: uri_test
+  changed_when: false
+  check_mode: false
   failed_when: uri_test.status is undefined or uri_test.status <= 0
 
 - name: Start web backend
@@ -101,6 +181,8 @@
     cmd: "${HOME}/bin/gitea -c ${HOME}/etc/gitea/app.ini admin user list | grep {{ gitea_admin_user }}"
     chdir: "${HOME}/var/gitea"
   register: admin_test
+  changed_when: false
+  check_mode: false
   failed_when: admin_test.rc > 1
 
 - name: Create admin user
