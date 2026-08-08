@@ -1,2 +1,26 @@
 ---
 # defaults file for roles/gitea
+
+# Which upstream the binary comes from. Forgejo is a hard fork of gitea and is a
+# drop-in replacement: it reads the same `app.ini`, honours the `GITEA_*` paths,
+# and its `migrate` subcommand is the same one. So only the download URL differs
+# and everything else in this role — the `~/bin/gitea` symlink, the supervisord
+# program name, `~/etc/gitea`, `~/var/gitea` — is deliberately left named
+# `gitea`, to keep the migration from moving files and rewriting the database at
+# the same time.
+#
+# The migration path is one-way and narrow: Forgejo v10 is the last release that
+# accepts a gitea database, and it only accepts one from gitea <= 1.22.x. So the
+# route is gitea 1.22.x -> forgejo 10.0.x -> any later forgejo. Once a host is on
+# forgejo it cannot go back — the schema records its version specifically to
+# block a downgrade. See plans/22-forgejo-tailnet.md.
+#
+# These live in defaults rather than vars/ so the inventory can override them;
+# role vars/ outranks inventory host vars and would win instead.
+gitea_flavour: gitea
+
+gitea_download_urls:
+  gitea: "https://github.com/go-gitea/gitea/releases/download/v{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
+  forgejo: "https://codeberg.org/forgejo/forgejo/releases/download/v{{ gitea_version }}/forgejo-{{ gitea_version }}-linux-amd64"
+
+gitea_download_url: "{{ gitea_download_urls[gitea_flavour] }}"

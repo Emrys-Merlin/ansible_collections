@@ -33,14 +33,17 @@
       - "CREATE DATABASE `{{ gitea_db_name }}`"
   when: gitea_db_name not in gitea_db_check.stdout
 
-- name: Check if gitea binary exists {{ gitea_version }}
+- name: Check if {{ gitea_flavour }} binary exists {{ gitea_version }}
   ansible.builtin.stat:
     path: "${HOME}/bin/gitea-{{ gitea_version }}"
   register: gitea_binary
 
-- name: Download gitea binary
+# Named gitea-<version> whatever the flavour, so the ~/bin/gitea symlink and the
+# supervisord program keep working across the forgejo switch. See gitea_flavour
+# in defaults/main.yml.
+- name: Download {{ gitea_flavour }} binary
   ansible.builtin.get_url:
-    url: "https://github.com/go-gitea/gitea/releases/download/v{{ gitea_version }}/gitea-{{ gitea_version }}-linux-amd64"
+    url: "{{ gitea_download_url }}"
     dest: "${HOME}/bin/gitea-{{ gitea_version }}"
     mode: "755"
   when: not gitea_binary.stat.exists
@@ -49,12 +52,19 @@
     - Migrate database
     - Restart gitea service
 
-- name: Link gitea binary
+- name: Link {{ gitea_flavour }} binary
   ansible.builtin.file:
     src: "${HOME}/bin/gitea-{{ gitea_version }}"
     dest: "${HOME}/bin/gitea"
     state: link
-  when: not gitea_binary.stat.exists
+  # Also skipped under --check, because the download above did not really
+  # happen there and `state: link` refuses to point at a file that does not
+  # exist. Without this, a version bump cannot be dry-run at all — it dies here.
+  # Giving it check_mode: false instead would be worse: that really would create
+  # a symlink to a nonexistent binary during a dry run.
+  when:
+    - not gitea_binary.stat.exists
+    - not ansible_check_mode
 
 - name: Create gitea config directory
   ansible.builtin.file:
@@ -98,6 +108,13 @@
     value: "{{ item.value }}"
     mode: "0600"
   loop:
+    # Pinned, not defaulted. Upstream's default for this is
+    # "<APP_DATA_PATH>/<flavour>-repositories", so the gitea -> forgejo switch
+    # silently moved it from gitea-repositories to forgejo-repositories, a
+    # directory that does not exist — the web UI still came up but every repo
+    # API call returned 500 "no such file or directory". Naming it here makes
+    # the location this role's decision instead of the upstream binary's.
+    - { section: repository, option: ROOT, value: "/home/{{ ansible_user }}/var/gitea/gitea-repositories" }
     - { section: server, option: DOMAIN, value: "{{ ansible_user }}.uber.space" }
     - { section: server, option: ROOT_URL, value: "https://%(DOMAIN)s{{ gitea_url_path }}" }
     # Privacy: no gravatar or CDN fetches off this box.
