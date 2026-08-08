@@ -31,10 +31,44 @@ host, so the host copy drifts from the stored one. In practice only the
 the stored copy on the next deploy is harmless. If a remote does stop working,
 recover with `rclone config reconnect <remote>:` and re-store the result.
 
+Monitoring with Uptime Kuma
+---------------------------
+
+Both the cron job and the mount can report to [Uptime Kuma](https://uptime.kuma.pet)
+Push monitors. Everything is off by default, so an invocation that sets none of
+these behaves exactly as before.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `rclone_push_url` | `""` | Full push URL (base + token) for the cron job. Empty skips pushing |
+| `rclone_job_timeout` | `21600` | Seconds before the job is killed and reported hung |
+| `rclone_mount_probe_enable` | `false` | Install a cron probe that actively touches the mount |
+| `rclone_mount_probe_path` | `{{ rclone_location }}/data` | **Host-side** mountpoint |
+| `rclone_mount_probe_push_url` | `""` | Full push URL for the probe |
+| `rclone_mount_probe_minute` | `*/10` | Probe schedule |
+| `rclone_mount_probe_timeout` | `30` | Seconds before the mount is called hung |
+
+Two things worth knowing before changing any of this:
+
+- The job runs `docker compose up **--exit-code-from rclone**`. Plain
+  `docker compose up` — what this role used to run — exits **0 even when the
+  container fails**, so any success/failure reporting built on it would be green
+  precisely when it should be red.
+- `rclone_mount_probe_path` is **not derivable** from `rclone_command`: that
+  carries the path *inside* the container, and only `/data` is bind-mounted.
+  A mount whose command ends in `/data/pcloud` needs
+  `rclone_mount_probe_path: "{{ rclone_location }}/data/pcloud"` spelled out.
+
+The probe exists because a mount that is *gone* and a mount that is *hung* look
+different: the first makes node_exporter's `node_filesystem_device_error` series
+disappear, while the second still looks perfectly mounted and only reveals itself
+when something tries to read it.
+
 Requirements
 ------------
 
-This role assumes that docker is installed on the host
+This role assumes that docker is installed on the host, and `curl` on it if push
+monitoring is enabled.
 
 Example Playbook
 ----------------

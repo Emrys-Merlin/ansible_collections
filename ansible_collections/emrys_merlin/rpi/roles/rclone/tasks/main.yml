@@ -69,12 +69,48 @@
     recreate: always
   register: rclone_container
 
+# The job is a script rather than an inline cron line because it has to carry an
+# exit code, a timeout, a duration and a failure message -- see the template.
+- name: Install the job wrapper
+  ansible.builtin.template:
+    src: job.sh.j2
+    dest: "{{ rclone_location }}/job.sh"
+    # 0700, not 0755: the rendered script embeds the push token, and anyone
+    # holding that can mark the monitor green -- the one lie this exists to
+    # prevent. Same reasoning as the 0600 on rclone.conf above.
+    mode: '700'
+  no_log: true  # the rendered script embeds the push token; --diff would print it
+  when: rclone_cron_enable
+
+# The cron entry's `name` is the key ansible.builtin.cron matches on, so it must
+# stay exactly as it was. Renaming it here would leave the old, unmonitored
+# `docker compose up` line in the crontab and run both.
 - name: Add to crontab
   ansible.builtin.cron:
     name: "{{ rclone_location }}"
-    job: "cd {{ rclone_location }} && docker compose up"
+    job: "{{ rclone_location }}/job.sh"
     minute: "{{ rclone_cron_minute }}"
     hour: "{{ rclone_cron_hour }}"
-    user: "{{ ansible_user_id }}"
+    # ansible_facts['user_id'], not the ansible_user_id alias: the latter is
+    # deprecated in ansible-core 2.21. Both need gather_facts.
+    user: "{{ ansible_facts['user_id'] }}"
     state: present
   when: rclone_cron_enable
+
+- name: Install the mount probe
+  ansible.builtin.template:
+    src: mount-probe.sh.j2
+    dest: "{{ rclone_location }}/mount-probe.sh"
+    mode: '700'  # embeds the push token -- see the job wrapper above
+  no_log: true  # the rendered script embeds the push token; --diff would print it
+  when: rclone_mount_probe_enable
+
+# Its own schedule, not the job's: a mount dies on a different timescale than a
+# nightly copy fails. `state` is computed so disabling the probe also removes it.
+- name: Add the mount probe to crontab
+  ansible.builtin.cron:
+    name: "{{ rclone_location }} mount probe"
+    job: "{{ rclone_location }}/mount-probe.sh"
+    minute: "{{ rclone_mount_probe_minute }}"
+    user: "{{ ansible_facts['user_id'] }}"
+    state: "{{ 'present' if rclone_mount_probe_enable else 'absent' }}"

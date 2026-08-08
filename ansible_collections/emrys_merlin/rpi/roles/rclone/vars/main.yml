@@ -8,3 +8,24 @@ rclone_restart: "no"
 rclone_cron_enable: false
 rclone_cron_hour: 0
 rclone_cron_minute: 0
+
+# Uptime Kuma push monitoring. Everything below defaults to off, so an
+# invocation that sets none of it behaves exactly as before.
+# See plans/15-rclone-mount-monitoring.md in the control repo.
+
+# Full push URL (base + token) for the cron job. Empty disables pushing.
+rclone_push_url: ""
+# Seconds before the cron job is treated as hung and killed. Deliberately
+# generous: killing a legitimate long copy is worse than a late alarm, and the
+# monitor's own heartbeat interval still catches a job that never finishes.
+rclone_job_timeout: 21600
+
+# Mount probe. Only meaningful on an invocation that mounts something.
+rclone_mount_probe_enable: false
+# Host-side path of the mountpoint. It cannot be derived: `rclone_command`
+# carries the *container* path (e.g. "mount pcloud:Backups /data/pcloud"), and
+# only /data is bind-mounted from "{{ rclone_location }}/data".
+rclone_mount_probe_path: "{{ rclone_location }}/data"
+rclone_mount_probe_push_url: ""
+rclone_mount_probe_minute: "*/10"
+rclone_mount_probe_timeout: 30

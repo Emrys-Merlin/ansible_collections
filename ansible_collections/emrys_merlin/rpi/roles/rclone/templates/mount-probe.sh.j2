@@ -1,0 +1,43 @@
+#!/bin/sh
+# Managed by Ansible -- emrys_merlin.rpi.rclone. Do not edit on the host.
+#
+# Actively probes the rclone FUSE mount and reports to an Uptime Kuma push
+# monitor. See plans/15-rclone-mount-monitoring.md.
+#
+# Why an active probe: node_exporter's node_filesystem_device_error series
+# disappearing already catches a mount that is *gone*, but a mount that is
+# *hung* still looks mounted. Only touching it tells the two apart.
+set -u
+
+start=$(date +%s)
+
+# timeout is the entire point: a hung FUSE mount hangs `ls` indefinitely.
+# -k is best-effort -- if the fuse daemon is wedged rather than dead, `ls` sits
+# in uninterruptible sleep and survives even a KILL. That leaks one stuck
+# process per run, but `timeout` still returns 124 on schedule, so the monitor
+# goes red as intended and the leak stops when the mount is repaired.
+timeout -k 10 {{ rclone_mount_probe_timeout }} \
+    ls "{{ rclone_mount_probe_path }}" >/dev/null 2>&1
+rc=$?
+ms=$(( ($(date +%s) - start) * 1000 ))
+
+if [ "$rc" -eq 0 ]; then
+    status=up
+    msg="OK"
+elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    status=down
+    msg="mount hung: no response in {{ rclone_mount_probe_timeout }}s"
+else
+    status=down
+    msg="mount unreadable: ls exit $rc"
+fi
+
+[ -n "{{ rclone_mount_probe_push_url }}" ] || exit "$rc"
+
+curl -fsS -m 15 --retry 3 --retry-delay 5 -G \
+     --data-urlencode "status=$status" \
+     --data-urlencode "msg=$msg" \
+     --data-urlencode "ping=$ms" \
+     "{{ rclone_mount_probe_push_url }}" >/dev/null
+
+exit "$rc"

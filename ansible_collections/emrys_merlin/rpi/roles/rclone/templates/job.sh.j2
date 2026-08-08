@@ -1,0 +1,47 @@
+#!/bin/sh
+# Managed by Ansible -- emrys_merlin.rpi.rclone. Do not edit on the host.
+#
+# Runs the rclone compose project once and reports the outcome to an Uptime Kuma
+# push monitor. See plans/15-rclone-mount-monitoring.md.
+set -u
+
+start=$(date +%s)
+
+# --exit-code-from is load-bearing: plain `docker compose up` exits 0 even when
+# the container fails, so without it this script would report success on every
+# run -- a monitor that is green precisely when it should be red.
+#
+# timeout is load-bearing too: a hung rclone would otherwise hang this script
+# forever and the monitor would report neither up nor down. -k forces a KILL if
+# compose ignores the TERM.
+out=$(cd "{{ rclone_location }}" \
+      && timeout -k 30 {{ rclone_job_timeout }} \
+         docker compose up --exit-code-from rclone 2>&1)
+rc=$?
+ms=$(( ($(date +%s) - start) * 1000 ))
+
+if [ "$rc" -eq 0 ]; then
+    status=up
+    msg="OK"
+elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+    status=down
+    msg="timed out after {{ rclone_job_timeout }}s"
+else
+    status=down
+    msg="exit $rc: $(printf '%s' "$out" | tail -c 300 | tr '\n' ' ')"
+fi
+
+# No push URL configured -- reporting is simply skipped, so invocations that do
+# not monitor are unaffected.
+[ -n "{{ rclone_push_url }}" ] || exit "$rc"
+
+# -G --data-urlencode so rclone's error text cannot break the URL.
+# --retry so one transient tailnet blip does not raise a false alarm.
+curl -fsS -m 15 --retry 3 --retry-delay 5 -G \
+     --data-urlencode "status=$status" \
+     --data-urlencode "msg=$msg" \
+     --data-urlencode "ping=$ms" \
+     "{{ rclone_push_url }}" >/dev/null
+
+# Preserve the real outcome for anything reading cron mail.
+exit "$rc"
