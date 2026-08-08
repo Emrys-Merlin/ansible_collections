@@ -164,6 +164,12 @@
 #
 # The client needs no credentials here at all — uberspace preconfigures
 # ~/.my.cnf (0600) with the account's user and password.
+#
+# check_mode: false on this and the other read-only probes further down. They
+# change nothing, and without it --check skips them, leaves .stdout / .status
+# unset, and every `when` and `until` reading one fails — the `until` loops
+# spending their full retry budget doing it. Same fix as 636330a made to the
+# tailscale role.
 - name: Check if the uptime kuma database exists
   ansible.builtin.command:
     argv:
@@ -174,6 +180,7 @@
       - "SHOW DATABASES LIKE '{{ uptime_kuma_db_name }}'"
   register: uptime_kuma_db_check
   changed_when: false
+  check_mode: false
 
 - name: Create the uptime kuma database
   ansible.builtin.command:
@@ -242,6 +249,7 @@
   retries: 30
   delay: 10
   changed_when: false
+  check_mode: false
 
 # no_log because the credentials are passed through the task environment, which
 # is visible with -vvv. The script prints only CREATED or UNCHANGED on success
@@ -266,6 +274,9 @@
   notify:
     - Restart uptime-kuma service
 
+# Guarded rather than given check_mode: false, because unlike the probes above
+# this one writes — a dry run must not create a user. That leaves it skipped
+# under --check with no rc to assert on, hence the `when`.
 - name: Assert the admin user exists
   ansible.builtin.assert:
     that:
@@ -275,6 +286,7 @@
       {{ uptime_kuma_admin.rc }}): {{ uptime_kuma_admin.stderr | default('') }}
       {{ uptime_kuma_admin.stdout | default('') }}
     quiet: true
+  when: uptime_kuma_admin is not skipped
 
 # needSetup is computed once at startup, so an instance that came up with an
 # empty user table keeps serving the setup page until it is bounced.
@@ -291,3 +303,4 @@
   delay: 10
   until: uptime_kuma_serving.status == 200
   changed_when: false
+  check_mode: false

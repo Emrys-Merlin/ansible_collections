@@ -108,3 +108,17 @@ Configure in the UI, once:
 Monitors themselves are configured by hand and are **not** managed by Ansible;
 Uptime Kuma 2.x has no REST API for creating them. That is a known trade,
 recorded in the plan rather than discovered later.
+
+## `--check` safety
+
+The three read-only probes (the database existence check, the schema wait and
+`Check uptime kuma is serving`) carry `check_mode: false`. **Do not remove it.**
+A command skipped by `--check` returns an *empty* `stdout`, not an undefined one,
+so the failure is quiet rather than loud: the database check reports an existing
+database as missing, and the schema wait's `until` can never match `""`, so it
+spends all 30 retries — five minutes — before failing what should be a fast dry
+run.
+
+`Create the uptime kuma admin user` deliberately does **not** have it, because it
+writes; the assert that reads its `rc` is guarded with
+`when: uptime_kuma_admin is not skipped` instead.
