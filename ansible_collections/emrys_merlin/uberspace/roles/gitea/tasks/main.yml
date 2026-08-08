@@ -193,7 +193,11 @@
     - { section: service, option: DEFAULT_KEEP_EMAIL_PRIVATE, value: "true" }
     - { section: service, option: NO_REPLY_ADDRESS, value: "noreply.{{ ansible_user }}.uber.space" }
     - { section: mailer, option: ENABLED, value: "true" }
-    - { section: mailer, option: MAILER_TYPE, value: sendmail }
+    # Upstream renamed MAILER_TYPE to PROTOCOL; the old key is removed below.
+    # Mail on this host has never been used or tested, so this is written to
+    # match upstream's current defaults rather than to preserve a working setup —
+    # if mail is ever needed, debugging starts from a conforming config.
+    - { section: mailer, option: PROTOCOL, value: sendmail }
     - { section: mailer, option: FROM, value: "{{ ansible_user }}@uber.space" }
   loop_control:
     label: "[{{ item.section }}] {{ item.option }}"
@@ -213,6 +217,30 @@
     - { section: database, option: PASSWD, value: "{{ gitea_db_password }}" }
     - { section: security, option: SECRET_KEY, value: "{{ gitea_secret_key }}" }
   no_log: true
+  notify:
+    - Restart gitea service
+
+# ini_file cannot rename a key, so keys replaced upstream have to be deleted
+# separately from writing their successor. Forgejo logged an [E] for MAILER_TYPE
+# on every start, pointing at [mailer] PROTOCOL, which is now set above.
+#
+# Note this is NOT the "tidying up a key that matches the current default" that
+# the README warns against — these are keys upstream has renamed or dropped, and
+# leaving them behind is what causes the noise.
+#
+# Kept as a standing task rather than run once by hand: it is idempotent, and it
+# is the only record in this repo that these keys must not come back.
+- name: Remove deprecated gitea config
+  community.general.ini_file:
+    path: "${HOME}/etc/gitea/app.ini"
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    state: absent
+    mode: "0600"
+  loop:
+    - { section: mailer, option: MAILER_TYPE }
+  loop_control:
+    label: "[{{ item.section }}] {{ item.option }}"
   notify:
     - Restart gitea service
 

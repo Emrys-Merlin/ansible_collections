@@ -59,6 +59,12 @@ gitea → forgejo fork, `[database] HOST` at v15, `[server] HTTP_ADDR` and
 makes it this role's decision rather than the binary's. Do not "tidy up" a key by
 deleting it because it matches the current default.
 
+Keys upstream has **renamed or dropped** are the separate case, and are handled
+by the `Remove deprecated gitea config` task — `ini_file` cannot rename a key, so
+the successor is written by the main loop and the old name deleted there.
+`[mailer] MAILER_TYPE` → `[mailer] PROTOCOL` is the one entry so far. Leaving a
+superseded key behind makes forgejo log an `[E]` on every start.
+
 The consequence to be aware of: anything configured through the gitea UI that
 lands in `app.ini` persists and is invisible to this repo. The role does not
 own the whole file, only the keys it names.
