@@ -43,9 +43,10 @@ scrape_configs:
         - "emu:9100"  # node exporter
         # ['harpyie:9369', 'harpyie:9370', 'schnepfe:8888', 'emu:9100']
 
-
-remote_write:
-  - url: "http://localhost:8086/api/v1/prom/write?db=prometheus"
-
-remote_read:
-  - url: "http://localhost:8086/api/v1/prom/read?db=prometheus"
+# There used to be `remote_write`/`remote_read` blocks here pointing at an
+# InfluxDB on localhost:8086. That instance was retired around August 2020, but
+# the config outlived it: nothing listened on 8086 any more, so remote_write
+# spun in an infinite retry loop (~212M sample retries, zero bytes ever
+# delivered, in 60 hours of uptime) and burned CPU continuously on shared
+# hosting. Removed 2026-08-09 — see plans/31-remove-influxdb-uberspace.md.
+# Do not reinstate without an endpoint that actually exists.
