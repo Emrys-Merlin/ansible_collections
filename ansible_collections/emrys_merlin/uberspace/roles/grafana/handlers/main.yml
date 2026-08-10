@@ -1,0 +1,11 @@
+---
+# handlers file for collections/ansible_collections/emrys_merlin/uberspace/roles/grafana
+- name: Reread grafana service
+  community.general.supervisorctl:
+    name: grafana
+    state: present
+
+- name: Restart grafana service
+  community.general.supervisorctl:
+    name: grafana
+    state: restarted

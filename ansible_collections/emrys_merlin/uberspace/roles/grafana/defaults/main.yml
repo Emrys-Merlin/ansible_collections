@@ -1,0 +1,66 @@
+---
+# defaults file for collections/ansible_collections/emrys_merlin/uberspace/roles/grafana
+#
+# This role captures the hand-built Grafana that has run on this account since
+# 2020. Every default below was read off the live host rather than chosen, so
+# that adopting the service is a no-op. See plans/32-grafana-uberspace-into-ansible.md.
+
+# Pinned deliberately low. 9.0.6 is from August 2022 and long out of support;
+# upgrading it is a separate decision with a schema migration behind it, tracked
+# as phase C of plan 32. Do not bump this as a drive-by — the `prometheus_version`
+# trap in uberspace.yml (playbook says 2.45.0, host runs 2.17.2) is what that
+# looks like when it goes wrong.
+grafana_version: "9.0.6"
+
+# Checked against the published .sha256 for this exact tarball. get_url verifies
+# it, so a truncated or substituted download fails the run instead of installing.
+grafana_archive_sha256: "f768169391baccb99eb12d2be5045e3ddb15609f42152fe2d2bb13f0738ad49b"
+grafana_archive_url: "https://dl.grafana.com/oss/release/grafana-{{ grafana_version }}.linux-amd64.tar.gz"
+
+# The hand-install split the tarball: `bin/*` went to ~/bin and the rest of the
+# payload (conf/, public/) to ~/usr/share/grafana. That split is reproduced here
+# rather than normalised, because normalising it would move a running service.
+grafana_bin_dir: "~/bin"
+grafana_homepath: "~/usr/share/grafana"
+
+grafana_config_dir: "~/etc/grafana"
+grafana_config_file: "{{ grafana_config_dir }}/grafana.ini"
+grafana_log_dir: "~/var/log/grafana"
+
+# Outside the homepath on purpose: this survives a version bump, and it is where
+# grafana-image-renderer (the only installed plugin, ~400M of bundled chromium)
+# lives. Grafana wants this as an absolute path.
+grafana_plugins_dir: "/home/{{ ansible_user }}/var/lib/grafana/plugins"
+
+# 3001 is gitea/forgejo and 3002 is uptime kuma; do not renumber any of the three.
+grafana_port: 3000
+
+# Public, unlike every other service on this host. Grafana is reached at
+# https://timadler.uber.space/grafana/ and `serve_from_sub_path` is what makes
+# the sub-path work — dropping it breaks every asset URL, not just the root.
+grafana_web_backend_path: "/grafana"
+grafana_domain: "{{ ansible_user }}.uber.space"
+grafana_root_url: "%(protocol)s://%(domain)s/grafana/"
+# Quoted, like every other boolean-looking value in this file. An unquoted YAML
+# `true` reaches ini_file as a Python bool and is written as `True` — a real
+# one-line diff and a real service restart, every run, forever. Grafana parses
+# both spellings, so the only thing that matters is matching what is on disk.
+grafana_serve_from_sub_path: "true"
+
+# Uberspace grants ALL PRIVILEGES on `<user>\_%` only, so the prefix is required.
+grafana_db_type: "mysql"
+grafana_db_name: "{{ ansible_user }}_grafana"
+# Host and port together, which is how Grafana spells it — not two keys.
+grafana_db_host: "127.0.0.1:3306"
+
+# Quoted for the same reason as grafana_serve_from_sub_path below.
+grafana_reporting_enabled: "false"
+grafana_check_for_updates: "true"
+
+# `True` with a capital T, matching what is on disk. Grafana parses it either
+# way; writing `true` here would produce a one-line diff and a service restart
+# for no reason at all.
+grafana_smtp_enabled: "True"
+grafana_smtp_host: "read.uberspace.de:587"
+grafana_smtp_from_name: "Grafana"
+grafana_smtp_from_address: "{{ ansible_user }}@uber.space"

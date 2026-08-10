@@ -1,0 +1,221 @@
+---
+# tasks file for collections/ansible_collections/emrys_merlin/uberspace/roles/grafana
+#
+# Grafana under the unprivileged uberspace account: no root, no package manager,
+# no per-user systemd, so a manual install plus a supervisord unit. Unlike every
+# other service here it is deliberately *public*, behind an `uberspace web
+# backend` at /grafana. See plans/32-grafana-uberspace-into-ansible.md.
+#
+# This role adopts an instance that has been running since 2020 and was never
+# installed by Ansible. Phase A's whole purpose is that a `--check --diff` run
+# reports nothing but the one known whitespace difference on the supervisord
+# unit — that no-op is the proof the capture is complete. Resist the urge to
+# "improve" a path or a value here; every one of them was read off the host.
+#
+# The play runs with gather_facts: false, so there is no ansible_env: module
+# paths use "~" (expanded on the target by Ansible's `path` argument type),
+# shell commands use $HOME, and the supervisord .ini uses %(ENV_HOME)s.
+
+- name: Create grafana directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ grafana_config_dir }}"
+    - "{{ grafana_homepath }}"
+    - "{{ grafana_log_dir }}"
+    - "{{ grafana_plugins_dir }}"
+
+# Version is read from the binary rather than tracked in a marker file, because
+# there is no marker on this host and writing one would itself be a change —
+# which would cost exactly the no-op this phase exists to demonstrate.
+# `grafana-server -v` prints "Version 9.0.6 (commit: ..., branch: HEAD)".
+- name: Check for an installed grafana binary
+  ansible.builtin.stat:
+    path: "{{ grafana_bin_dir }}/grafana-server"
+  register: grafana_binary
+
+# check_mode: false because this is a read that later `when`s depend on. Without
+# it --check skips the task, leaves .stdout unset rather than undefined-erroring,
+# and the install block below would run in a dry run against an up-to-date host —
+# reporting a pile of changes that are not real. Same fix as 636330a made to the
+# tailscale role and the uptime_kuma probes.
+- name: Read the installed grafana version
+  ansible.builtin.shell:
+    cmd: "${HOME}/bin/grafana-server -v"
+  register: grafana_installed_version
+  when: grafana_binary.stat.exists
+  changed_when: false
+  check_mode: false
+
+- name: Install grafana {{ grafana_version }}
+  when: >-
+    not grafana_binary.stat.exists
+    or grafana_version not in (grafana_installed_version.stdout | default(''))
+  block:
+    - name: Create temporary directory
+      ansible.builtin.tempfile:
+        state: directory
+      register: grafana_temp
+
+    - name: Download grafana archive
+      ansible.builtin.get_url:
+        url: "{{ grafana_archive_url }}"
+        dest: "{{ grafana_temp.path }}/grafana.tar.gz"
+        checksum: "sha256:{{ grafana_archive_sha256 }}"
+        mode: "0644"
+
+    - name: Extract grafana archive
+      ansible.builtin.unarchive:
+        src: "{{ grafana_temp.path }}/grafana.tar.gz"
+        dest: "{{ grafana_temp.path }}"
+        remote_src: true
+
+    # Both binaries, not just the server. The hand-install left ~/bin/grafana-cli
+    # at a 2020 build while grafana-server moved to 9.0.6 in 2022 — a mismatched
+    # pair that would quietly misbehave the next time anyone installed a plugin
+    # with it. Shipping them together is the fix, and it costs nothing.
+    - name: Install the grafana binaries
+      ansible.builtin.copy:
+        src: "{{ grafana_temp.path }}/{{ grafana_archive_root }}/bin/{{ item }}"
+        dest: "{{ grafana_bin_dir }}/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - grafana-server
+        - grafana-cli
+      notify:
+        - Restart grafana service
+
+    # cp -a rather than the copy module: `public/` is 129M across several
+    # thousand files, and copy would checksum every one of them on every run.
+    # This is inside the version-guarded block, so it runs on install and upgrade
+    # only. `data/` is deliberately not touched — it is runtime state (png/, csv/,
+    # alerting/) and the tarball has no such directory to overwrite it with.
+    - name: Install the grafana homepath payload
+      ansible.builtin.command:
+        cmd: "cp -a {{ grafana_temp.path }}/{{ grafana_archive_root }}/{{ item }}/. ${HOME}/usr/share/grafana/{{ item }}/"
+      loop:
+        - conf
+        - public
+      changed_when: true
+      notify:
+        - Restart grafana service
+
+  always:
+    - name: Delete temporary directory
+      ansible.builtin.file:
+        path: "{{ grafana_temp.path }}"
+        state: absent
+      when: grafana_temp.path is defined
+
+# grafana.ini is deliberately NOT templated wholesale, for the same reason the
+# gitea role stopped templating app.ini: this role does not own the whole file.
+# It holds four credentials that phase B moves into 1Password and rotates, and
+# until then they have to stay exactly where they are. ini_file touches only the
+# options named below and leaves everything else — including the commented-out
+# alternative root_url on the line above it — alone.
+#
+# `mode` is deliberately absent. The live file is 0664, which is loose for a file
+# holding four passwords, but /home/timadler is 0700 so nothing else on this
+# shared host can traverse to it. Tightening it to 0600 belongs in phase B, when
+# the file is being rewritten with rotated values anyway; doing it here would
+# spend the no-op for no security gain.
+#
+# `modify_inactive_option: false` keeps ini_file's hands off commented-out lines.
+# By default it treats a `# root_url = ...` line as an inactive form of the
+# option it is setting and deletes it. There is exactly one such line here — the
+# with-an-explicit-port alternative sitting above the live root_url — and losing
+# it is both a pointless change and a small loss of the original author's notes.
+- name: Configure grafana
+  community.general.ini_file:
+    path: "{{ grafana_config_file }}"
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    modify_inactive_option: false
+  loop:
+    - { section: database, option: type, value: "{{ grafana_db_type }}" }
+    - { section: database, option: host, value: "{{ grafana_db_host }}" }
+    - { section: database, option: name, value: "{{ grafana_db_name }}" }
+    # No phoning home from a box the owner does not administer.
+    - { section: analytics, option: reporting_enabled, value: "{{ grafana_reporting_enabled }}" }
+    - { section: analytics, option: check_for_updates, value: "{{ grafana_check_for_updates }}" }
+    - { section: server, option: domain, value: "{{ grafana_domain }}" }
+    # Contains Grafana's own %(...)s interpolation, which is why it is quoted and
+    # why nothing here tries to build it out of grafana_domain.
+    - { section: server, option: root_url, value: "{{ grafana_root_url }}" }
+    # Without this, Grafana serves absolute asset paths at / and the whole UI
+    # 404s behind the /grafana web backend.
+    - { section: server, option: serve_from_sub_path, value: "{{ grafana_serve_from_sub_path }}" }
+    - { section: paths, option: plugins, value: "{{ grafana_plugins_dir }}" }
+    - { section: smtp, option: enabled, value: "{{ grafana_smtp_enabled }}" }
+    - { section: smtp, option: host, value: "{{ grafana_smtp_host }}" }
+    - { section: smtp, option: from_name, value: "{{ grafana_smtp_from_name }}" }
+    - { section: smtp, option: from_address, value: "{{ grafana_smtp_from_address }}" }
+    # NOT managed here, on purpose, and this list is the reason phase A is safe
+    # to run: [database] user/password, [security] admin_user/admin_password and
+    # [smtp] user/password stay untouched on disk until phase B puts them in
+    # 1Password and rotates them.
+  notify:
+    - Restart grafana service
+
+- name: Create supervisorctl grafana service
+  ansible.builtin.template:
+    src: templates/grafana-service.ini.j2
+    dest: "~/etc/services.d/grafana.ini"
+    mode: "0664"
+  notify:
+    - Reread grafana service
+    - Restart grafana service
+
+# `uberspace web backend set` is not idempotent in the way Ansible wants — it
+# reports success and rewrites the entry every time — so it is guarded on the
+# listing instead. Same shape as the gitea role's removal of its backend, just
+# pointed the other way. This is the one service on the account that is meant to
+# be on the public internet.
+- name: Check for the public web backend
+  ansible.builtin.command:
+    cmd: uberspace web backend list
+  register: grafana_web_backends
+  changed_when: false
+  check_mode: false
+
+- name: Create the public web backend
+  ansible.builtin.command:
+    cmd: "uberspace web backend set {{ grafana_web_backend_path }} --http --port {{ grafana_port }}"
+  when: grafana_web_backend_path ~ ' http:' not in grafana_web_backends.stdout
+  notify:
+    - Restart grafana service
+
+- name: Apply pending service changes
+  ansible.builtin.meta: flush_handlers
+
+# Proves the thing this role just adopted is actually serving, through the public
+# path rather than the local port — which is what catches a broken web backend or
+# a serve_from_sub_path regression, neither of which shows up on :3000.
+- name: Check grafana is serving
+  ansible.builtin.uri:
+    url: "https://{{ grafana_domain }}{{ grafana_web_backend_path }}/api/health"
+    method: GET
+    status_code: 200
+  register: grafana_serving
+  retries: 12
+  delay: 10
+  until: grafana_serving.status == 200
+  changed_when: false
+  check_mode: false
+
+- name: Assert grafana reports the pinned version and a healthy database
+  ansible.builtin.assert:
+    that:
+      - grafana_serving.json.database == "ok"
+      - grafana_serving.json.version == grafana_version
+    fail_msg: >-
+      /api/health reports version {{ grafana_serving.json.version | default('?') }}
+      and database {{ grafana_serving.json.database | default('?') }}; expected
+      {{ grafana_version }} and "ok". A version mismatch means the host was
+      upgraded by hand and grafana_version has drifted — reconcile it before the
+      next run rather than letting an untagged run reinstall over the top.
+    quiet: true

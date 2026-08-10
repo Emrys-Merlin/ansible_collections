@@ -1,0 +1,29 @@
+{#
+  Named grafana-service.ini.j2, not grafana.ini.j2, because this host has two
+  files called grafana.ini and confusing them is easy: this is the supervisord
+  unit at ~/etc/services.d/grafana.ini, NOT the Grafana config at
+  ~/etc/grafana/grafana.ini (which ini_file manages, option by option).
+
+  Only ~/etc/services.d/*.ini is read by supervisord here — see
+  plans/20-fix-prometheus-supervisord-path.md, which fixed exactly that bug in
+  another role.
+
+  `~` is not expanded by supervisord; %(ENV_HOME)s is, which is what the *_sv
+  variables in vars/main.yml provide.
+
+  This file deliberately ends WITHOUT a trailing newline, because the unit that
+  has been on the host since 2022 has none and Ansible's template module keeps
+  whatever the template ends with. It is what makes adopting the running service
+  a zero-change run instead of a restart. If your editor adds one back, the only
+  cost is a single spurious Grafana restart on the next run — but do not add one
+  on purpose.
+#}
+[program:grafana]
+command=grafana-server
+  -config {{ grafana_config_file_sv }}
+  -homepath {{ grafana_homepath_sv }}
+  cfg:default.paths.logs={{ grafana_log_dir_sv }}
+autostart=yes
+autorestart=yes
+# `startsecs` is set by Uberspace monitoring team, to prevent a broken service from looping
+startsecs=30

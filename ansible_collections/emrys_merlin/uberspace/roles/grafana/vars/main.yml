@@ -1,0 +1,15 @@
+---
+# vars file for collections/ansible_collections/emrys_merlin/uberspace/roles/grafana
+#
+# Supervisord does not expand `~` — a bare tilde in a .ini ends up as a directory
+# literally named `~` on the host (there is one already, left by an early version
+# of the prometheus role). `%(ENV_HOME)s` is the only thing it understands, so the
+# `~`-prefixed paths from defaults/main.yml are rewritten here for template use.
+# Kept in vars/ rather than defaults/ so they cannot drift out of sync with the
+# paths the Ansible modules actually use. Same arrangement as the uptime_kuma role.
+grafana_homepath_sv: "{{ grafana_homepath | regex_replace('^~', '%(ENV_HOME)s') }}"
+grafana_config_file_sv: "{{ grafana_config_file | regex_replace('^~', '%(ENV_HOME)s') }}"
+grafana_log_dir_sv: "{{ grafana_log_dir | regex_replace('^~', '%(ENV_HOME)s') }}"
+
+# The upstream tarball unpacks to a single top-level directory of this name.
+grafana_archive_root: "grafana-{{ grafana_version }}"
