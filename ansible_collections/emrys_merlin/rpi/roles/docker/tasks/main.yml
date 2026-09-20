@@ -22,10 +22,31 @@
   become: true
   when: not docker_key.stat.exists
 
+# The template uses ansible_distribution_release, not ansible_lsb['codename']:
+# ansible_lsb is empty wherever neither lsb_release nor /etc/lsb-release exists,
+# which is the case in a minimal Debian container.
 - name: Copy docker.list
   ansible.builtin.template:
     src: templates/docker.list.j2
     dest: "{{ docker_list_location }}"
+    mode: "644"
+  become: true
+
+# Debian's docker-cli (trixie and later) recommends Debian's docker-buildx,
+# while Docker's docker-compose-plugin recommends Docker's docker-buildx-plugin.
+# Both ship /usr/libexec/docker/cli-plugins/docker-buildx and neither declares a
+# Conflicts, so apt happily unpacks both and dpkg fails on the second. Refuse
+# Debian's: the Docker repository's plugin is what every host here already
+# runs, and an unsatisfiable Recommends is simply skipped.
+- name: Refuse Debian's docker-buildx in favour of Docker's plugin
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/docker-buildx
+    content: |
+      # Managed by ansible (emrys_merlin.rpi.docker). Clashes file-for-file with
+      # docker-buildx-plugin from download.docker.com, which is the one in use.
+      Package: docker-buildx
+      Pin: release *
+      Pin-Priority: -1
     mode: "644"
   become: true
 
@@ -36,6 +57,10 @@
       # docker-compose-plugin provides `docker compose` (v2), used by the
       # docker_compose_v2 module and the rclone cron job.
       - docker-compose-plugin
+      # The Docker SDK for Python, which docker_login below needs on the target.
+      # Raspberry Pi OS hosts happened to have it; a minimal Debian container
+      # does not.
+      - python3-docker
     state: present
     update_cache: true
   become: true
