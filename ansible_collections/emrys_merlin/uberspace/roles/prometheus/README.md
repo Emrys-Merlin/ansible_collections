@@ -4,12 +4,12 @@ emrys_merlin.uberspace.prometheus
 > **Not wired into any playbook. The service it installs no longer exists.**
 >
 > Prometheus was uninstalled from uberspace on 2026-08-10 together with Grafana,
-> `promprox`, `homematicip_tracker` and `website_monitor` — service stopped,
+> its scrape proxy, `homematicip_tracker` and `website_monitor` — service stopped,
 > `/prometheus` web backend deleted, binaries, `~/etc/prometheus` and 225M of
 > TSDB removed. The role is kept so a rebuild starts from working code, but note
 > that `templates/prometheus.yml.j2` still lists scrape targets that are all
-> gone now (`localhost:9135`, `localhost:8000`, `localhost:9129`, and `emu:9100`
-> through the retired pushprox proxy). Anything reinstating this has to rewrite
+> gone now (`localhost:9135`, `localhost:8000`, `localhost:9129`), plus an
+> example `node` job for `emu:9100`. Anything reinstating this has to rewrite
 > that file first. See `plans/32-grafana-uberspace-into-ansible.md`.
 >
 > `prometheus_version` was also a live trap while the role was wired in: the

@@ -29,19 +29,14 @@ scrape_configs:
     - targets: ['localhost:9135', 'localhost:8000']
 
   - job_name: 'homematicip_tracking'
-    # proxy_url: 'https://timadler.uber.space/promprox'
-    # proxy_url: http://localhost:9130/
     static_configs:
       - targets: ['localhost:9129']
 
-  - job_name: 'promprox'
-    proxy_url: http://localhost:9130/
+  # Example: emu's node_exporter. Reaching it from uberspace needs a path
+  # into the LAN (e.g. the tailnet); the old scrape proxy is gone.
+  - job_name: 'node'
     static_configs:
-      - targets:
-        # - ":9369"
-        # - "emu:9369"  # pushprox
-        - "emu:9100"  # node exporter
-        # ['harpyie:9369', 'harpyie:9370', 'schnepfe:8888', 'emu:9100']
+      - targets: ['emu:9100']
 
 # There used to be `remote_write`/`remote_read` blocks here pointing at an
 # InfluxDB on localhost:8086. That instance was retired around August 2020, but
