@@ -83,7 +83,7 @@ The ordering is fiddly and the tasks depend on it:
 
 | Variable | Default | Notes |
 |---|---|---|
-| `uptime_kuma_version` | `2.5.0` | A bump is a var change; the install is versioned and guarded by a marker file |
+| `uptime_kuma_version` | `2.5.6` | A bump is a var change; the install is versioned and guarded by a marker file |
 | `uptime_kuma_node_bin` | `/opt/nodejs22/bin` | Must be Node >= 20.4.0; asserted |
 | `uptime_kuma_host` | `127.0.0.1` | See above before changing |
 | `uptime_kuma_port` | `3002` | 3001 is gitea, 3000 is grafana |
