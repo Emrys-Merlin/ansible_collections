@@ -1,17 +1,14 @@
 ---
 # tasks file for collections/ansible_collections/emrys_merlin/rpi/roles/github_cli
-- name: Check if repository key exists
-  ansible.builtin.stat:
-    path: "{{ github_cli_key_file_location }}"
-  register: github_cli_key
-
+# Fetched on every run (force) so a rotated signing key is picked up; the file
+# is only replaced, and the task only changed, when the published key differs.
 - name: Download github_cli repository key
-  ansible.builtin.uri:
+  ansible.builtin.get_url:
     url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
     dest: "{{ github_cli_key_file_location }}"
     mode: "a+r"
+    force: true
   become: true
-  when: not github_cli_key.stat.exists
 
 - name: Copy github_cli.list
   ansible.builtin.template:
