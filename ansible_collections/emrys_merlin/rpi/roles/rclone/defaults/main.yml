@@ -1,2 +1,12 @@
 ---
 # defaults file for collections/ansible_collections/emrys_merlin/rpi/roles/pcloud_cc
+
+# Shell command job.sh runs on the host before the sync, as job.sh's own user. A
+# non-zero exit skips the sync and pushes `down` with its last output line. Empty
+# renders job.sh without any hook code.
+rclone_pre_sync_command: ""
+
+# Whether a deploy starts the container, which runs rclone_command once. false
+# still pulls the image and creates the container, leaving job.sh as the only
+# thing that runs the command, so a hook in job.sh cannot be bypassed.
+rclone_run_on_deploy: true

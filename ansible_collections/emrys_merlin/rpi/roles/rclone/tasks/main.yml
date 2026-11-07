@@ -15,7 +15,7 @@
   community.docker.docker_compose_v2:
     project_src: "{{ rclone_location }}"
     state: absent
-  when: compose_file.stat.exists
+  when: compose_file.stat.exists and rclone_run_on_deploy
 
 - name: Create rclone data directory
   ansible.builtin.file:
@@ -59,14 +59,17 @@
     mode: '600'
   when: rclone_config_content is not defined
 
+# `stopped` is `compose up --no-start`: the image is still pulled and the container
+# (re)created when its config changed, but nothing runs, and a repeat deploy
+# reports no change. job.sh's `compose up` starts that same container.
 - name: Run rclone container
   community.docker.docker_compose_v2:
     project_src: "{{ rclone_location }}"
-    state: present
+    state: "{{ 'present' if rclone_run_on_deploy else 'stopped' }}"
     build: never
     pull: always
     remove_orphans: true
-    recreate: always
+    recreate: "{{ 'always' if rclone_run_on_deploy else 'auto' }}"
   register: rclone_container
 
 # The job is a script rather than an inline cron line because it has to carry an

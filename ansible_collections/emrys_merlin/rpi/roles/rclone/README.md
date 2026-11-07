@@ -64,6 +64,26 @@ different: the first makes node_exporter's `node_filesystem_device_error` series
 disappear, while the second still looks perfectly mounted and only reveals itself
 when something tries to read it.
 
+Running something before the sync
+---------------------------------
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `rclone_pre_sync_command` | `""` | Shell command `job.sh` runs on the host before `docker compose up`. Empty renders `job.sh` without any hook code |
+| `rclone_run_on_deploy` | `true` | Whether a deploy starts the container, which runs `rclone_command` once |
+
+A non-zero exit from the hook skips the sync, pushes `down` with
+`pre-sync: <last line of its output>` (300 characters at most), and makes `job.sh`
+exit with the hook's code. It shares `rclone_job_timeout` with the sync's own limit.
+
+- **The hook runs on the host as `job.sh`'s user, outside the container** — root on
+  a host deployed as root. If it does not need that, it must drop privileges itself.
+- **The hook lives in `job.sh`, and a deploy does not go through `job.sh`.** With
+  the default `rclone_run_on_deploy: true`, every deploy runs `rclone_command`
+  once, unguarded. Set it to `false` when the hook has to cover every run. The
+  image is still pulled and the container created, so the deploy stays
+  idempotent, but a sync in progress at that moment is stopped.
+
 Requirements
 ------------
 

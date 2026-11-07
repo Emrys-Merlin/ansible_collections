@@ -7,6 +7,14 @@ set -u
 
 start=$(date +%s)
 
+{% if rclone_pre_sync_command %}
+# The pre-sync hook. Non-zero skips the sync. Under timeout for the same reason
+# as compose below: a hung hook must not leave the monitor without an answer.
+pre_out=$(timeout -k 30 {{ rclone_job_timeout }} sh -c {{ rclone_pre_sync_command | quote }} 2>&1)
+pre_rc=$?
+
+if [ "$pre_rc" -eq 0 ]; then
+{% endif %}
 # --exit-code-from is load-bearing: plain `docker compose up` exits 0 even when
 # the container fails, so without it this script would report success on every
 # run -- a monitor that is green precisely when it should be red.
@@ -18,9 +26,22 @@ out=$(cd "{{ rclone_location }}" \
       && timeout -k 30 {{ rclone_job_timeout }} \
          docker compose up --exit-code-from rclone 2>&1)
 rc=$?
+{% if rclone_pre_sync_command %}
+else
+    rc=$pre_rc
+fi
+{% endif %}
 ms=$(( ($(date +%s) - start) * 1000 ))
 
+{% if rclone_pre_sync_command %}
+if [ "$pre_rc" -ne 0 ]; then
+    status=down
+    pre_msg=$(printf '%s\n' "$pre_out" | tail -n 1 | cut -c 1-300)
+    msg="pre-sync: ${pre_msg:-exit $pre_rc}"
+elif [ "$rc" -eq 0 ]; then
+{% else %}
 if [ "$rc" -eq 0 ]; then
+{% endif %}
     status=up
     msg="OK"
 elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
